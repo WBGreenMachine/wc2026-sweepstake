@@ -1,0 +1,8 @@
+{
+  "name": "wc2026-sweepstake",
+  "version": "1.0.0",
+  "description": "World Cup 2026 Sweepstake",
+  "engines": {
+    "node": "18"
+  }
+}
