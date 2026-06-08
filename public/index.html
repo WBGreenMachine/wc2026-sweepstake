@@ -320,10 +320,10 @@ const FLAGS = {
   "England":"🏴󠁧󠁢󠁥󠁮󠁧󠁿","Croatia":"🇭🇷","Ghana":"🇬🇭","Panama":"🇵🇦"
 };
 const TIERS = {
-  1:["Spain","France","England","Brazil","Portugal","Argentina","Germany","Netherlands","Norway","Belgium","Colombia","Japan"],
-  2:["Morocco","United States","Uruguay","Mexico","Switzerland","Croatia","Turkey","Ecuador","Senegal","Sweden","Canada","Austria"],
-  3:["Paraguay","Scotland","Ivory Coast","Egypt","Czechia","Bosnia-Herzegovina","Ghana","Algeria","South Korea","Tunisia","Australia","Iran"],
-  4:["DR Congo","South Africa","Saudi Arabia","Panama","Iraq","Uzbekistan","Qatar","Cape Verde","New Zealand","Jordan","Haiti","Curacao"]
+  1:["France","Argentina","Norway","England","Japan","Spain","Germany","Brazil","Colombia","Portugal","Belgium","Netherlands"],
+  2:["Scotland","Austria","Switzerland","Morocco","Turkey","Sweden","Croatia","United States","Senegal","Uruguay","Mexico","Ecuador"],
+  3:["Iran","Egypt","Algeria","Ghana","Ivory Coast","Czechia","Bosnia-Herzegovina","Paraguay","South Korea","Canada","Australia","Tunisia"],
+  4:["Saudi Arabia","Cape Verde","Haiti","Uzbekistan","Jordan","Qatar","Curacao","South Africa","DR Congo","Panama","New Zealand","Iraq"]
 };
 const PARTICIPANTS = ["Kyle","Chec","Quill","Harvey P","Ell","Sammy","Aaron","Matt","Dan","Will B","Joe","Bren"];
 
@@ -508,7 +508,7 @@ function getTeamKoPts(team){
   return pts;
 }
 function getPlayerScore(name){
-  const teams=players[name]||[];
+  const teams = PRESET_TEAMS[name]||[];
   let groupPts=0,koPts=0,goals=0,qualified=0,koWins=0;
   teams.forEach(team=>{
     groupPts+=getTeamGroupPts(team);
@@ -757,11 +757,6 @@ function tierOf(t){ for(const [n,ts] of Object.entries(TIERS)) if(ts.includes(t)
 const allTeams = Object.values(GROUPS).flat();
 
 function renderSweepstake(){
-  const effectivePlayers = {};
-  PARTICIPANTS.forEach(name=>{
-    effectivePlayers[name] = (players[name]&&players[name].some(Boolean)) ? players[name] : PRESET_TEAMS[name]||[];
-  });
-
   let html='';
   if(!isAdmin) html+=`<div class="readonly-banner">👀 View-only</div>`;
 
@@ -770,44 +765,28 @@ function renderSweepstake(){
     <span class="tier-badge tier-2">🥈 Tier 2 — Contenders</span>
     <span class="tier-badge tier-3">🥉 Tier 3 — Underdogs</span>
     <span class="tier-badge tier-4">💔 Tier 4 — No Chance</span>
-  </div>`;
+  </div>
+  <div class="player-grid">`;
 
-  if(isAdmin){
-    html+=`<table class="assign-table">
-      <tr><th>Player</th><th>🥇 Tier 1</th><th>🥈 Tier 2</th><th>🥉 Tier 3</th><th>💔 Tier 4</th></tr>`;
-    PARTICIPANTS.forEach(name=>{
-      const teams=effectivePlayers[name]||[null,null,null,null];
-      html+=`<tr><td><strong>${name}</strong></td>`;
-      [1,2,3,4].forEach(tier=>{
-        const tierTeams=TIERS[tier];
-        const cur=teams[tier-1]||'';
-        const opts=`<option value="">—</option>`+tierTeams.map(t=>`<option value="${t}" ${cur===t?'selected':''}>${FLAGS[t]||''}${t}</option>`).join('');
-        html+=`<td><select onchange="assignTeam('${name}',${tier-1},this.value)">${opts}</select></td>`;
-      });
-      html+=`</tr>`;
-    });
-    html+=`</table>`;
-  } else {
-    html+=`<div class="player-grid">`;
-    PARTICIPANTS.forEach(name=>{
-      const teams=effectivePlayers[name]||[];
-      const picks=GOLDEN_BOOT_PICKS[name]||[];
-      const rows=teams.map(t=>{
-        if(!t) return '';
-        const tier=tierOf(t);
-        const inKO=KO_ROUNDS.some(r=>{for(let i=0;i<r.matches;i++){const m=koMatches[r.id+'_'+i];if(m&&(m.home===t||m.away===t))return true;}return false;});
-        const badge=inKO?`<span class="q-badge">KO</span>`:'';
-        return `<div class="team-tag"><span class="tier-dot t${tier}"></span><span class="flag">${FLAGS[t]||''}</span>${t}${badge}</div>`;
-      }).join('');
-      const pickRows=picks.map(p=>`<div style="font-size:11px;color:var(--muted);padding:2px 0">👟 ${p}</div>`).join('');
-      html+=`<div class="player-card">
-        <div class="player-card-header"><div class="player-name-display">${name}</div></div>
-        <div>${rows||'<div style="font-size:11px;color:var(--muted)">No teams yet</div>'}</div>
-        ${picks.length?`<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">${pickRows}</div>`:''}
-      </div>`;
-    });
-    html+=`</div>`;
-  }
+  PARTICIPANTS.forEach(name=>{
+    const teams = PRESET_TEAMS[name]||[];
+    const picks = GOLDEN_BOOT_PICKS[name]||[];
+    const rows = teams.map(t=>{
+      if(!t) return '';
+      const tier=tierOf(t);
+      const inKO=KO_ROUNDS.some(r=>{for(let i=0;i<r.matches;i++){const m=koMatches[r.id+'_'+i];if(m&&(m.home===t||m.away===t))return true;}return false;});
+      const badge=inKO?`<span class="q-badge">KO</span>`:'';
+      return `<div class="team-tag"><span class="tier-dot t${tier}"></span><span class="flag">${FLAGS[t]||''}</span>${t}${badge}</div>`;
+    }).join('');
+    const pickRows=picks.map(p=>`<div style="font-size:11px;color:var(--muted);padding:2px 0">👟 ${p}</div>`).join('');
+    html+=`<div class="player-card">
+      <div class="player-card-header"><div class="player-name-display">${name}</div></div>
+      <div>${rows||'<div style="font-size:11px;color:var(--muted)">No teams yet</div>'}</div>
+      ${picks.length?`<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">${pickRows}</div>`:''}
+    </div>`;
+  });
+
+  html+=`</div>`;
   document.getElementById('panel-sweepstake').innerHTML=html;
 }
 
@@ -823,11 +802,8 @@ function renderLeaderboard(){
   const ranked=PARTICIPANTS.map(name=>({name,...getPlayerScore(name)}))
     .sort((a,b)=>b.total-a.total||b.goals-a.goals);
 
-  const drawDone=PARTICIPANTS.some(p=>players[p]&&players[p].length>0);
-  if(!drawDone){
-    document.getElementById('panel-leaderboard').innerHTML=`<div class="empty"><div class="empty-icon">🏆</div>Draw hasn't happened yet!</div>`;
-    return;
-  }
+  const drawDone=true; // teams always hardcoded
+  if(!drawDone){ return; }
 
   let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:14px;font-weight:700;line-height:1.8">
     <b>Scoring:</b> Group pts (W=3, D=1) + KO wins (R32 +${KO_PTS.r32}, R16 +${KO_PTS.r16}, QF +${KO_PTS.qf}, SF +${KO_PTS.sf}, Final +${KO_PTS.final}, Winner bonus +${KO_PTS.winner}) · Tiebreaker: goals scored
@@ -838,7 +814,7 @@ function renderLeaderboard(){
   ranked.forEach((p,i)=>{
     const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
     const rc=i===0?'r1':i===1?'r2':i===2?'r3':'';
-    const teams=(players[p.name]||[]).filter(Boolean).map(t=>`${FLAGS[t]||''}${t}`).join(' · ');
+    const teams=(PRESET_TEAMS[p.name]||[]).filter(Boolean).map(t=>`${FLAGS[t]||''}${t}`).join(' · ');
     html+=`<div class="lb-row ${i<3?'rank-'+(i+1):''}">
       <div class="lb-rank ${rc}">${medal||i+1}</div>
       <div>
