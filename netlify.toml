@@ -7,3 +7,6 @@
 
 [functions."sync-scores"]
   schedule = "*/5 * * * *"
+
+[build.environment]
+  SECRETS_SCAN_OMIT_PATHS = "public/index.html"
