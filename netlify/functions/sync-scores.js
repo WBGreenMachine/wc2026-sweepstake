@@ -1,46 +1,38 @@
 const https = require("https");
 
-// ── CONFIG ────────────────────────────────────────────────
 const API_KEY      = process.env.API_FOOTBALL_KEY;
 const DB_URL       = process.env.FIREBASE_DB_URL;
 const CLIENT_EMAIL = process.env.FIREBASE_CLIENT_EMAIL;
 const PRIVATE_KEY  = (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
 
-const WC_2026_ID   = 1; // API-Football competition ID for FIFA World Cup 2026
-const WC_2026_SEASON = 2026;
+const WC_ID     = 1;
+const WC_SEASON = 2026;
 
-// ── HELPERS ───────────────────────────────────────────────
 function apiRequest(path) {
   return new Promise((resolve, reject) => {
     const options = {
       hostname: "v3.football.api-sports.io",
-      path,
-      method:  "GET",
+      path, method: "GET",
       headers: { "x-apisports-key": API_KEY }
     };
     let data = "";
     const req = https.request(options, res => {
-      res.on("data", chunk => data += chunk);
-      res.on("end", () => {
-        try { resolve(JSON.parse(data)); }
-        catch(e) { reject(e); }
-      });
+      res.on("data", c => data += c);
+      res.on("end", () => { try { resolve(JSON.parse(data)); } catch(e) { reject(e); } });
     });
     req.on("error", reject);
     req.end();
   });
 }
 
-// Generate a Google OAuth2 access token from service account credentials
 async function getAccessToken() {
   const { createSign } = require("crypto");
-  const now   = Math.floor(Date.now() / 1000);
+  const now = Math.floor(Date.now() / 1000);
   const claim = {
-    iss:   CLIENT_EMAIL,
+    iss: CLIENT_EMAIL,
     scope: "https://www.googleapis.com/auth/firebase.database https://www.googleapis.com/auth/userinfo.email",
-    aud:   "https://oauth2.googleapis.com/token",
-    exp:   now + 3600,
-    iat:   now
+    aud: "https://oauth2.googleapis.com/token",
+    exp: now + 3600, iat: now
   };
   const header  = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
   const payload = Buffer.from(JSON.stringify(claim)).toString("base64url");
@@ -53,156 +45,177 @@ async function getAccessToken() {
   return new Promise((resolve, reject) => {
     const body = `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`;
     const options = {
-      hostname: "oauth2.googleapis.com",
-      path:     "/token",
-      method:   "POST",
-      headers:  { "Content-Type": "application/x-www-form-urlencoded", "Content-Length": body.length }
+      hostname: "oauth2.googleapis.com", path: "/token", method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "Content-Length": body.length }
     };
     let data = "";
     const req = https.request(options, res => {
       res.on("data", c => data += c);
-      res.on("end", () => {
-        try { resolve(JSON.parse(data).access_token); }
-        catch(e) { reject(e); }
-      });
+      res.on("end", () => { try { resolve(JSON.parse(data).access_token); } catch(e) { reject(e); } });
     });
     req.on("error", reject);
-    req.write(body);
-    req.end();
+    req.write(body); req.end();
   });
 }
 
-// Write to Firebase REST API
 async function firebaseSet(path, value, token) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify(value);
     const url  = new URL(`${DB_URL}/${path}.json`);
     const options = {
       hostname: url.hostname,
-      path:     url.pathname + `?access_token=${token}`,
-      method:   "PUT",
-      headers:  { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) }
+      path: url.pathname + `?access_token=${token}`,
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) }
     };
     let data = "";
     const req = https.request(options, res => {
       res.on("data", c => data += c);
-      res.on("end", () => resolve(JSON.parse(data)));
+      res.on("end", () => resolve(data));
     });
     req.on("error", reject);
-    req.write(body);
-    req.end();
+    req.write(body); req.end();
   });
 }
 
-// Team name normalisation — API names → our app names
 const NAME_MAP = {
-  "Bosnia And Herzegovina": "Bosnia-Herzegovina",
-  "Bosnia & Herzegovina":   "Bosnia-Herzegovina",
-  "USA":                    "United States",
-  "United States of America": "United States",
-  "Ivory Coast":            "Ivory Coast",
-  "Cote d'Ivoire":          "Ivory Coast",
-  "DR Congo":               "DR Congo",
-  "Congo DR":               "DR Congo",
-  "Democratic Republic of Congo": "DR Congo",
-  "Korea Republic":         "South Korea",
-  "South Korea":            "South Korea",
-  "Türkiye":                "Turkey",
-  "Turkey":                 "Turkey",
-  "Curacao":                "Curacao",
-  "Curaçao":                "Curacao",
-  "Cape Verde":             "Cape Verde",
-  "Cabo Verde":             "Cape Verde",
+  "Bosnia And Herzegovina":"Bosnia-Herzegovina","Bosnia & Herzegovina":"Bosnia-Herzegovina",
+  "USA":"United States","United States of America":"United States",
+  "Cote d'Ivoire":"Ivory Coast","Congo DR":"DR Congo",
+  "Democratic Republic of Congo":"DR Congo","Korea Republic":"South Korea",
+  "Türkiye":"Turkey","Curaçao":"Curacao","Cabo Verde":"Cape Verde"
 };
-function normName(n) { return NAME_MAP[n] || n; }
+const norm = n => NAME_MAP[n] || n;
 
-// ── MAIN HANDLER ─────────────────────────────────────────
-exports.handler = async function(event, context) {
+exports.handler = async function() {
   try {
-    console.log("Starting sync...");
-
-    // 1. Get all WC 2026 fixtures
-    const fixturesRes = await apiRequest(
-      `/fixtures?league=${WC_2026_ID}&season=${WC_2026_SEASON}`
-    );
-    const fixtures = fixturesRes.response || [];
-    console.log(`Got ${fixtures.length} fixtures`);
-
-    // 2. Get Firebase access token
     const token = await getAccessToken();
 
-    // 3. Process group stage scores
-    const scores     = {};
+    // ── 1. FIXTURES (scores + goalscorers) ──────────────────
+    const fixRes = await apiRequest(`/fixtures?league=${WC_ID}&season=${WC_SEASON}`);
+    const fixtures = fixRes.response || [];
+
+    const scores      = {};
     const goalscorers = {};
 
     for (const f of fixtures) {
       const status = f.fixture.status.short;
       const isDone = ["FT","AET","PEN"].includes(status);
       const isLive = ["1H","HT","2H","ET","P"].includes(status);
-
       if (!isDone && !isLive) continue;
 
-      const home = normName(f.teams.home.name);
-      const away = normName(f.teams.away.name);
+      const home = norm(f.teams.home.name);
+      const away = norm(f.teams.away.name);
       const hs   = f.goals.home;
       const as_  = f.goals.away;
-
       if (hs === null || as_ === null) continue;
 
-      // Group stage matches (round contains "Group")
       const round = f.league.round || "";
       if (round.toLowerCase().includes("group")) {
-        const key = `${home}_${away}`;
-        scores[key] = { hs, as: as_ };
+        scores[`${home}_${away}`] = { hs, as: as_ };
       }
 
-      // Knockout matches — we store by fixture ID so admin can map them
-      if (["Round of 32","Round of 16","Quarter-finals","Semi-finals","Final","3rd Place Final"].some(r => round.includes(r))) {
-        const fid = String(f.fixture.id);
-        const winner = isDone
-          ? (hs > as_ ? home : as_ > hs ? away : f.teams.home.winner ? home : f.teams.away.winner ? away : null)
-          : null;
-        scores[`ko_fixture_${fid}`] = { home, away, hs, as: as_, round, winner, status };
-      }
-
-      // Get goal scorers for this fixture
       if (isDone || isLive) {
-        const eventsRes = await apiRequest(`/fixtures/events?fixture=${f.fixture.id}&type=Goal`);
-        const events    = eventsRes.response || [];
-        const homeGoals = [];
-        const awayGoals = [];
-        for (const ev of events) {
+        const evRes = await apiRequest(`/fixtures/events?fixture=${f.fixture.id}&type=Goal`);
+        const homeGoals = [], awayGoals = [];
+        for (const ev of (evRes.response || [])) {
           if (ev.type !== "Goal") continue;
-          const scorer = ev.player.name;
-          const minute = ev.time.elapsed;
-          const isHome = ev.team.name === f.teams.home.name || normName(ev.team.name) === home;
-          const entry  = `${scorer} ${minute}'`;
-          if (isHome) homeGoals.push(entry);
-          else awayGoals.push(entry);
+          const entry = `${ev.player.name} ${ev.time.elapsed}'`;
+          const isHome = norm(ev.team.name) === home;
+          if (isHome) homeGoals.push(entry); else awayGoals.push(entry);
         }
-        const matchKey = round.toLowerCase().includes("group")
-          ? `${home}_${away}`
-          : `ko_fixture_${f.fixture.id}`;
+        const matchKey = round.toLowerCase().includes("group") ? `${home}_${away}` : `ko_fixture_${f.fixture.id}`;
         goalscorers[matchKey] = { home: homeGoals, away: awayGoals };
       }
     }
 
-    // 4. Write to Firebase
     await firebaseSet("scores",      scores,      token);
     await firebaseSet("goalscorers", goalscorers, token);
 
-    console.log(`Synced ${Object.keys(scores).length} matches, ${Object.keys(goalscorers).length} with goalscorers`);
+    // ── 2. TOP SCORERS ──────────────────────────────────────
+    const scorersRes = await apiRequest(`/players/topscorers?league=${WC_ID}&season=${WC_SEASON}`);
+    const topScorers = (scorersRes.response || []).slice(0, 20).map(p => ({
+      name:     p.player.name,
+      photo:    p.player.photo,
+      team:     norm(p.statistics[0]?.team?.name || ""),
+      goals:    p.statistics[0]?.goals?.total || 0,
+      assists:  p.statistics[0]?.goals?.assists || 0,
+      games:    p.statistics[0]?.games?.appearences || 0,
+      shots:    p.statistics[0]?.shots?.total || 0,
+      yellows:  p.statistics[0]?.cards?.yellow || 0,
+      reds:     p.statistics[0]?.cards?.red || 0,
+      dribbles: p.statistics[0]?.dribbles?.success || 0,
+    }));
+    await firebaseSet("topScorers", topScorers, token);
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ ok: true, matches: Object.keys(scores).length })
-    };
+    // ── 3. PLAYER STATS (top assists, shots, dribbles, cards) 
+    const assistsRes  = await apiRequest(`/players/topassists?league=${WC_ID}&season=${WC_SEASON}`);
+    const topAssists = (assistsRes.response || []).slice(0, 10).map(p => ({
+      name:    p.player.name,
+      team:    norm(p.statistics[0]?.team?.name || ""),
+      assists: p.statistics[0]?.goals?.assists || 0,
+      games:   p.statistics[0]?.games?.appearences || 0,
+    }));
+    await firebaseSet("topAssists", topAssists, token);
 
-  } catch (err) {
-    console.error("Sync error:", err);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: err.message })
-    };
+    const yellowsRes = await apiRequest(`/players/topyellowcards?league=${WC_ID}&season=${WC_SEASON}`);
+    const topYellows = (yellowsRes.response || []).slice(0, 10).map(p => ({
+      name:    p.player.name,
+      team:    norm(p.statistics[0]?.team?.name || ""),
+      yellows: p.statistics[0]?.cards?.yellow || 0,
+      reds:    p.statistics[0]?.cards?.red || 0,
+      games:   p.statistics[0]?.games?.appearences || 0,
+    }));
+    await firebaseSet("topYellows", topYellows, token);
+
+    const redsRes = await apiRequest(`/players/topredcards?league=${WC_ID}&season=${WC_SEASON}`);
+    const topReds = (redsRes.response || []).slice(0, 10).map(p => ({
+      name:    p.player.name,
+      team:    norm(p.statistics[0]?.team?.name || ""),
+      yellows: p.statistics[0]?.cards?.yellow || 0,
+      reds:    p.statistics[0]?.cards?.red || 0,
+      games:   p.statistics[0]?.games?.appearences || 0,
+    }));
+    await firebaseSet("topReds", topReds, token);
+
+    // ── 4. TEAM STATS ────────────────────────────────────────
+    const teamsRes = await apiRequest(`/teams/statistics?league=${WC_ID}&season=${WC_SEASON}`);
+    // standings gives us goals for/against per team
+    const standingsRes = await apiRequest(`/standings?league=${WC_ID}&season=${WC_SEASON}`);
+    const standings = standingsRes.response?.[0]?.league?.standings?.flat() || [];
+
+    const teamStats = standings.map(t => ({
+      name:      norm(t.team.name),
+      played:    t.all.played,
+      goalsFor:  t.all.goals.for,
+      goalsAgainst: t.all.goals.against,
+      wins:      t.all.win,
+      draws:     t.all.draw,
+      losses:    t.all.lose,
+      pts:       t.points,
+    }));
+    await firebaseSet("teamStats", teamStats, token);
+
+    // Team cards — from fixtures events
+    const teamCards = {};
+    for (const f of fixtures) {
+      const status = f.fixture.status.short;
+      if (!["FT","AET","PEN","1H","HT","2H","ET","P"].includes(status)) continue;
+      const evRes = await apiRequest(`/fixtures/events?fixture=${f.fixture.id}&type=Card`);
+      for (const ev of (evRes.response || [])) {
+        const team = norm(ev.team.name);
+        if (!teamCards[team]) teamCards[team] = { yellows: 0, reds: 0 };
+        if (ev.detail === "Yellow Card") teamCards[team].yellows++;
+        if (ev.detail === "Red Card" || ev.detail === "Second Yellow card") teamCards[team].reds++;
+      }
+    }
+    await firebaseSet("teamCards", teamCards, token);
+
+    console.log("Sync complete");
+    return { statusCode: 200, body: JSON.stringify({ ok: true }) };
+
+  } catch(err) {
+    console.error(err);
+    return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
