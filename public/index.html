@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -243,6 +244,9 @@ body{background:var(--bg);color:var(--text);font-family:'Nunito',sans-serif;font
   <div class="nav-tab" onclick="showPanel('knockouts',this)">🏆 Knockouts</div>
   <div class="nav-tab" onclick="showPanel('qualified',this)">✅ In / Out</div>
   <div class="nav-tab" onclick="showPanel('sweepstake',this)">🎲 Sweepstake</div>
+  <div class="nav-tab" onclick="showPanel('golden-boot',this)">👟 Golden Boot</div>
+  <div class="nav-tab" onclick="showPanel('teams',this)">📊 Teams</div>
+  <div class="nav-tab" onclick="showPanel('players',this)">⚽ Players</div>
   <div class="nav-tab" onclick="showPanel('leaderboard',this)">🥇 Leaderboard</div>
 </nav>
 
@@ -252,7 +256,10 @@ body{background:var(--bg);color:var(--text);font-family:'Nunito',sans-serif;font
   <div id="panel-knockouts"  class="panel"></div>
   <div id="panel-qualified"  class="panel"></div>
   <div id="panel-sweepstake" class="panel"></div>
-  <div id="panel-leaderboard"class="panel"></div>
+  <div id="panel-golden-boot" class="panel"></div>
+  <div id="panel-teams"        class="panel"></div>
+  <div id="panel-players"      class="panel"></div>
+  <div id="panel-leaderboard"  class="panel"></div>
 </div>
 
 <div class="modal-overlay" id="admin-modal">
@@ -319,7 +326,39 @@ const TIERS = {
   3:["Paraguay","Scotland","Ivory Coast","Egypt","Czechia","Bosnia-Herzegovina","Ghana","Algeria","South Korea","Tunisia","Australia","Iran"],
   4:["DR Congo","South Africa","Saudi Arabia","Panama","Iraq","Uzbekistan","Qatar","Cape Verde","New Zealand","Jordan","Haiti","Curacao"]
 };
-const PARTICIPANTS = ["Kyle","Harvey P","Ell","Chec","Me","Aaron","Joe","Quill","Sammy","Dan","Will","Bren"];
+const PARTICIPANTS = ["Kyle","Chec","Quill","Harvey P","Ell","Sammy","Aaron","Matt","Dan","Will B","Joe","Bren"];
+
+// Pre-assigned teams per participant
+const PRESET_TEAMS = {
+  "Kyle":     ["France","Scotland","Iran","Saudi Arabia"],
+  "Chec":     ["Argentina","Austria","Egypt","Cape Verde"],
+  "Quill":    ["Norway","Switzerland","Algeria","Haiti"],
+  "Harvey P": ["England","Morocco","Ghana","Uzbekistan"],
+  "Ell":      ["Japan","Turkey","Ivory Coast","Jordan"],
+  "Sammy":    ["Spain","Sweden","Czechia","Qatar"],
+  "Aaron":    ["Germany","Croatia","Bosnia-Herzegovina","Curacao"],
+  "Matt":     ["Brazil","United States","Paraguay","South Africa"],
+  "Dan":      ["Colombia","Senegal","South Korea","DR Congo"],
+  "Will B":   ["Portugal","Uruguay","Canada","Panama"],
+  "Joe":      ["Belgium","Mexico","Australia","New Zealand"],
+  "Bren":     ["Netherlands","Ecuador","Tunisia","Iraq"],
+};
+
+// Golden Boot player picks per participant
+const GOLDEN_BOOT_PICKS = {
+  "Kyle":     ["Harry Kane","Luis Javier Suarez"],
+  "Chec":     ["Raphinha","Romelu Lukaku"],
+  "Quill":    ["Julian Alvarez","Kai Havertz"],
+  "Harvey P": ["Erling Haaland","Memphis Depay"],
+  "Ell":      ["Lautaro Martinez","Desire Doue"],
+  "Sammy":    ["Cristiano Ronaldo","Jamal Musiala"],
+  "Aaron":    ["Mikel Oyarzabal","Cody Gakpo"],
+  "Matt":     ["Lamine Yamal","Mikel Merino"],
+  "Dan":      ["Ousmane Dembele","Igor Thiago"],
+  "Will B":   ["Lionel Messi","Michael Olise"],
+  "Joe":      ["Kylian Mbappe","Luis Diaz"],
+  "Bren":     ["Vinicius Jr","Darwin Nunez"],
+};
 
 // Knockout bonus points (per win in that round, on top of group pts)
 const KO_PTS = { r32:3, r16:5, qf:8, sf:13, final:21, winner:21 };
@@ -357,13 +396,31 @@ const scoresRef      = ref(db,'scores');
 const koRef          = ref(db,'ko');
 const playersRef     = ref(db,'players2');
 const goalscorersRef = ref(db,'goalscorers');
+const topScorersRef  = ref(db,'topScorers');
+const topAssistsRef  = ref(db,'topAssists');
+const topYellowsRef  = ref(db,'topYellows');
+const topRedsRef     = ref(db,'topReds');
+const teamStatsRef   = ref(db,'teamStats');
+const teamCardsRef   = ref(db,'teamCards');
 
 let goalscorers = {};
+let topScorers  = [];
+let topAssists  = [];
+let topYellows  = [];
+let topReds     = [];
+let teamStats   = [];
+let teamCards   = {};
 
 onValue(scoresRef,      s=>{ scores      = s.val()||{}; sync(); });
 onValue(koRef,          s=>{ koMatches   = s.val()||{}; sync(); });
 onValue(playersRef,     s=>{ players     = s.val()||{}; sync(); });
 onValue(goalscorersRef, s=>{ goalscorers = s.val()||{}; sync(); });
+onValue(topScorersRef,  s=>{ topScorers  = s.val()||[]; sync(); });
+onValue(topAssistsRef,  s=>{ topAssists  = s.val()||[]; sync(); });
+onValue(topYellowsRef,  s=>{ topYellows  = s.val()||[]; sync(); });
+onValue(topRedsRef,     s=>{ topReds     = s.val()||[]; sync(); });
+onValue(teamStatsRef,   s=>{ teamStats   = s.val()||[]; sync(); });
+onValue(teamCardsRef,   s=>{ teamCards   = s.val()||{}; sync(); });
 onValue(ref(db,'.info/connected'), s=>{ s.val()?setSyncOn():setSyncOff(); });
 
 function sync(){ renderHeroStats(); refreshPanel(); }
@@ -701,17 +758,13 @@ function tierOf(t){ for(const [n,ts] of Object.entries(TIERS)) if(ts.includes(t)
 const allTeams = Object.values(GROUPS).flat();
 
 function renderSweepstake(){
-  const drawDone = PARTICIPANTS.some(p=>players[p]&&players[p].length>0);
+  const effectivePlayers = {};
+  PARTICIPANTS.forEach(name=>{
+    effectivePlayers[name] = (players[name]&&players[name].some(Boolean)) ? players[name] : PRESET_TEAMS[name]||[];
+  });
 
   let html='';
-  if(!drawDone){
-    html+=`<div class="pending-banner">
-      <div class="pending-title">🎲 Draw Pending</div>
-      <div class="pending-sub">The admin will assign teams to each player below</div>
-    </div>`;
-  } else {
-    if(!isAdmin) html+=`<div class="readonly-banner">👀 View-only</div>`;
-  }
+  if(!isAdmin) html+=`<div class="readonly-banner">👀 View-only</div>`;
 
   html+=`<div class="tier-legend">
     <span class="tier-badge tier-1">🥇 Tier 1 — Favourites</span>
@@ -721,11 +774,10 @@ function renderSweepstake(){
   </div>`;
 
   if(isAdmin){
-    // Admin: assignment table
     html+=`<table class="assign-table">
       <tr><th>Player</th><th>🥇 Tier 1</th><th>🥈 Tier 2</th><th>🥉 Tier 3</th><th>💔 Tier 4</th></tr>`;
     PARTICIPANTS.forEach(name=>{
-      const teams=players[name]||[null,null,null,null];
+      const teams=effectivePlayers[name]||[null,null,null,null];
       html+=`<tr><td><strong>${name}</strong></td>`;
       [1,2,3,4].forEach(tier=>{
         const tierTeams=TIERS[tier];
@@ -736,27 +788,27 @@ function renderSweepstake(){
       html+=`</tr>`;
     });
     html+=`</table>`;
-  } else if(drawDone) {
-    // Viewers: cards
+  } else {
     html+=`<div class="player-grid">`;
     PARTICIPANTS.forEach(name=>{
-      const teams=players[name]||[];
+      const teams=effectivePlayers[name]||[];
+      const picks=GOLDEN_BOOT_PICKS[name]||[];
       const rows=teams.map(t=>{
         if(!t) return '';
         const tier=tierOf(t);
-        // ko status
         const inKO=KO_ROUNDS.some(r=>{for(let i=0;i<r.matches;i++){const m=koMatches[r.id+'_'+i];if(m&&(m.home===t||m.away===t))return true;}return false;});
         const badge=inKO?`<span class="q-badge">KO</span>`:'';
         return `<div class="team-tag"><span class="tier-dot t${tier}"></span><span class="flag">${FLAGS[t]||''}</span>${t}${badge}</div>`;
       }).join('');
+      const pickRows=picks.map(p=>`<div style="font-size:11px;color:var(--muted);padding:2px 0">👟 ${p}</div>`).join('');
       html+=`<div class="player-card">
         <div class="player-card-header"><div class="player-name-display">${name}</div></div>
-        <div>${rows||'<div style="font-size:11px;color:var(--muted)">No teams assigned yet</div>'}</div>
+        <div>${rows||'<div style="font-size:11px;color:var(--muted)">No teams yet</div>'}</div>
+        ${picks.length?`<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">${pickRows}</div>`:''}
       </div>`;
     });
     html+=`</div>`;
   }
-
   document.getElementById('panel-sweepstake').innerHTML=html;
 }
 
@@ -813,13 +865,133 @@ window.resetScores=()=>{
 };
 
 // ── PANELS ────────────────────────────────────────────────
+// ── GOLDEN BOOT ───────────────────────────────────────────
+function renderGoldenBoot(){
+  const el = document.getElementById('panel-golden-boot');
+  if(!topScorers.length){
+    el.innerHTML=`<div class="empty"><div class="empty-icon">👟</div>No data yet — updates once matches are played.</div>`;
+    return;
+  }
+  let html=`<div style="margin-bottom:16px;font-size:12px;color:var(--muted);font-weight:700">Top 20 scorers · live from API-Football · updates every 5 mins</div>
+  <div style="background:var(--surface);border:2px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow)">
+  <div style="display:grid;grid-template-columns:36px 1fr 40px 40px 40px;gap:6px;padding:8px 14px;background:var(--green);font-size:10px;font-weight:800;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.08em">
+    <div></div><div>Player</div><div style="text-align:center">⚽</div><div style="text-align:center">🎯</div><div style="text-align:center">🎮</div>
+  </div>`;
+  topScorers.forEach((p,i)=>{
+    const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+    const bg = i===0?'background:var(--gold-light)':i===1?'background:#f8f8f8':i===2?'background:#fff7f0':'';
+    html+=`<div style="display:grid;grid-template-columns:36px 1fr 40px 40px 40px;gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:center;${bg}">
+      <div style="font-family:'Abril Fatface',serif;font-size:18px;color:var(--muted);text-align:center">${medal||i+1}</div>
+      <div>
+        <div style="font-weight:800;font-size:13px">${p.name}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:1px">${FLAGS[p.team]||''} ${p.team}</div>
+      </div>
+      <div style="text-align:center;font-family:'Abril Fatface',serif;font-size:20px;color:var(--green)">${p.goals}</div>
+      <div style="text-align:center;font-size:13px;font-weight:700;color:var(--muted)">${p.assists||0}</div>
+      <div style="text-align:center;font-size:11px;color:var(--muted)">${p.games||0}</div>
+    </div>`;
+  });
+  html+=`</div><div style="font-size:10px;color:var(--muted);margin-top:8px;text-align:center">⚽ Goals &nbsp;·&nbsp; 🎯 Assists &nbsp;·&nbsp; 🎮 Games</div>`;
+  el.innerHTML=html;
+}
+
+// ── TEAMS STATS ───────────────────────────────────────────
+function statTable(title, emoji, rows, col1Label, col1Key, col2Label, col2Key) {
+  let html=`<div style="margin-bottom:20px">
+    <div style="font-family:'Abril Fatface',serif;font-size:20px;color:var(--green);margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid var(--border)">${emoji} ${title}</div>
+    <div style="background:var(--surface);border:2px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow)">
+    <div style="display:grid;grid-template-columns:32px 1fr 60px ${col2Key?'60px':''};gap:6px;padding:7px 12px;background:var(--green);font-size:10px;font-weight:800;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.08em">
+      <div></div><div>Team</div><div style="text-align:center">${col1Label}</div>${col2Key?`<div style="text-align:center">${col2Label}</div>`:''}
+    </div>`;
+  rows.forEach((r,i)=>{
+    const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+    html+=`<div style="display:grid;grid-template-columns:32px 1fr 60px ${col2Key?'60px':''};gap:6px;padding:9px 12px;border-bottom:1px solid var(--border);align-items:center;${i===0?'background:var(--gold-light)':''}">
+      <div style="font-family:'Abril Fatface',serif;font-size:16px;color:var(--muted);text-align:center">${medal||i+1}</div>
+      <div style="font-weight:700;font-size:13px">${FLAGS[r.name]||''} ${r.name}</div>
+      <div style="text-align:center;font-family:'Abril Fatface',serif;font-size:18px;color:var(--green)">${r[col1Key]}</div>
+      ${col2Key?`<div style="text-align:center;font-size:13px;font-weight:700;color:var(--muted)">${r[col2Key]}</div>`:''}
+    </div>`;
+  });
+  html+=`</div></div>`;
+  return html;
+}
+
+function renderTeams(){
+  const el = document.getElementById('panel-teams');
+  if(!teamStats.length&&!Object.keys(teamCards).length){
+    el.innerHTML=`<div class="empty"><div class="empty-icon">📊</div>No data yet — updates once matches are played.</div>`;
+    return;
+  }
+  const ts = Array.isArray(teamStats) ? teamStats : Object.values(teamStats);
+  const byGoalsFor    = [...ts].sort((a,b)=>b.goalsFor-a.goalsFor).slice(0,5);
+  const byGoalsAgainst= [...ts].filter(t=>t.played>0).sort((a,b)=>a.goalsAgainst-b.goalsAgainst).slice(0,5);
+  const withCards = Object.entries(teamCards).map(([name,c])=>({name,...c}));
+  const byYellows = [...withCards].sort((a,b)=>b.yellows-a.yellows).slice(0,5);
+  const byReds    = [...withCards].sort((a,b)=>b.reds-a.reds).slice(0,5);
+
+  let html='';
+  html+=statTable('Most Goals Scored','⚽',byGoalsFor,'Goals','goalsFor','Played','played');
+  html+=statTable('Best Defence','🛡️',byGoalsAgainst,'Conceded','goalsAgainst','Played','played');
+  html+=statTable('Most Yellow Cards','🟨',byYellows,'Yellows','yellows','Reds','reds');
+  if(byReds.some(r=>r.reds>0)) html+=statTable('Most Red Cards','🟥',byReds,'Reds','reds','Yellows','yellows');
+  el.innerHTML=html;
+}
+
+// ── PLAYER STATS ──────────────────────────────────────────
+function playerStatTable(title, emoji, rows, col1Label, col1Key, col2Label, col2Key) {
+  let html=`<div style="margin-bottom:20px">
+    <div style="font-family:'Abril Fatface',serif;font-size:20px;color:var(--green);margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid var(--border)">${emoji} ${title}</div>
+    <div style="background:var(--surface);border:2px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow)">
+    <div style="display:grid;grid-template-columns:32px 1fr 60px ${col2Key?'60px':''};gap:6px;padding:7px 12px;background:var(--green);font-size:10px;font-weight:800;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.08em">
+      <div></div><div>Player</div><div style="text-align:center">${col1Label}</div>${col2Key?`<div style="text-align:center">${col2Label}</div>`:''}
+    </div>`;
+  rows.forEach((p,i)=>{
+    const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+    html+=`<div style="display:grid;grid-template-columns:32px 1fr 60px ${col2Key?'60px':''};gap:6px;padding:9px 12px;border-bottom:1px solid var(--border);align-items:center;${i===0?'background:var(--gold-light)':''}">
+      <div style="font-family:'Abril Fatface',serif;font-size:16px;color:var(--muted);text-align:center">${medal||i+1}</div>
+      <div>
+        <div style="font-weight:700;font-size:12px">${p.name}</div>
+        <div style="font-size:10px;color:var(--muted)">${FLAGS[p.team]||''} ${p.team}</div>
+      </div>
+      <div style="text-align:center;font-family:'Abril Fatface',serif;font-size:18px;color:var(--green)">${p[col1Key]}</div>
+      ${col2Key?`<div style="text-align:center;font-size:13px;font-weight:700;color:var(--muted)">${p[col2Key]}</div>`:''}
+    </div>`;
+  });
+  html+=`</div></div>`;
+  return html;
+}
+
+function renderPlayers(){
+  const el = document.getElementById('panel-players');
+  if(!topAssists.length&&!topYellows.length){
+    el.innerHTML=`<div class="empty"><div class="empty-icon">⚽</div>No data yet — updates once matches are played.</div>`;
+    return;
+  }
+  let html='';
+  const assists5  = (Array.isArray(topAssists)?topAssists:Object.values(topAssists)).slice(0,5);
+  const yellows5  = (Array.isArray(topYellows)?topYellows:Object.values(topYellows)).slice(0,5);
+  const reds5     = (Array.isArray(topReds)?topReds:Object.values(topReds)).filter(p=>p.reds>0).slice(0,5);
+  const shots5    = [...(Array.isArray(topScorers)?topScorers:Object.values(topScorers))].sort((a,b)=>b.shots-a.shots).slice(0,5);
+  const dribbles5 = [...(Array.isArray(topScorers)?topScorers:Object.values(topScorers))].sort((a,b)=>b.dribbles-a.dribbles).slice(0,5);
+
+  html+=playerStatTable('Top Assists','🎯',assists5,'Assists','assists','Games','games');
+  html+=playerStatTable('Most Shots','🔫',shots5,'Shots','shots','Goals','goals');
+  html+=playerStatTable('Most Dribbles','🕺',dribbles5,'Dribbles','dribbles','Goals','goals');
+  html+=playerStatTable('Most Yellow Cards','🟨',yellows5,'Yellows','yellows','Reds','reds');
+  if(reds5.length) html+=playerStatTable('Most Red Cards','🟥',reds5,'Reds','reds','Yellows','yellows');
+  el.innerHTML=html;
+}
+
 function refreshPanel(){
-  if(currentPanel==='groups')      renderGroups();
-  else if(currentPanel==='matches')     renderMatches();
-  else if(currentPanel==='knockouts')   renderKnockouts();
-  else if(currentPanel==='qualified')   renderQualified();
-  else if(currentPanel==='sweepstake')  renderSweepstake();
-  else if(currentPanel==='leaderboard') renderLeaderboard();
+  if(currentPanel==='groups')       renderGroups();
+  else if(currentPanel==='matches')      renderMatches();
+  else if(currentPanel==='knockouts')    renderKnockouts();
+  else if(currentPanel==='qualified')    renderQualified();
+  else if(currentPanel==='sweepstake')   renderSweepstake();
+  else if(currentPanel==='golden-boot')  renderGoldenBoot();
+  else if(currentPanel==='teams')        renderTeams();
+  else if(currentPanel==='players')      renderPlayers();
+  else if(currentPanel==='leaderboard')  renderLeaderboard();
 }
 
 window.showPanel=(name,tab)=>{
@@ -828,7 +1000,7 @@ window.showPanel=(name,tab)=>{
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('panel-'+name).classList.add('active');
   if(tab) tab.classList.add('active');
-  else{const idx={groups:0,matches:1,knockouts:2,qualified:3,sweepstake:4,leaderboard:5}[name];document.querySelectorAll('.nav-tab')[idx].classList.add('active');}
+  else{const idx={groups:0,matches:1,knockouts:2,qualified:3,sweepstake:4,'golden-boot':5,teams:6,players:7,leaderboard:8}[name];document.querySelectorAll('.nav-tab')[idx].classList.add('active');}
   refreshPanel();
 };
 
