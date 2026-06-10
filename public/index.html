@@ -210,6 +210,43 @@ body{background:var(--bg);color:var(--text);font-family:'Nunito',sans-serif;font
   .hero{padding:20px 14px 16px}.main{padding:14px}.nav{padding:0 14px}
   .hero-stats{display:none}
 }
+
+/* LIVE TICKER */
+.live-ticker{display:none;background:#c1121f;color:#fff;overflow:hidden}
+.live-ticker.active{display:block}
+.ticker-inner{display:flex;align-items:stretch}
+.ticker-label{background:#8b0000;padding:8px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;white-space:nowrap;display:flex;align-items:center;gap:6px;flex-shrink:0}
+.ticker-dot{width:8px;height:8px;border-radius:50%;background:#ff6b6b;animation:pulse 1s infinite;flex-shrink:0}
+.ticker-scroll{overflow:hidden;flex:1;padding:8px 0}
+.ticker-track{display:inline-flex;animation:ticker-move 35s linear infinite;white-space:nowrap}
+.ticker-track:hover{animation-play-state:paused}
+@keyframes ticker-move{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.ticker-item{display:inline-flex;align-items:center;gap:8px;padding:0 28px;font-size:13px;font-weight:700;white-space:nowrap;border-right:1px solid rgba(255,255,255,.2)}
+.ticker-score{font-family:'Abril Fatface',serif;font-size:17px}
+.ticker-minute{font-size:10px;background:rgba(255,255,255,.2);padding:1px 5px;border-radius:4px;font-weight:800}
+.ticker-owners{font-size:10px;color:rgba(255,255,255,.7);font-weight:700}
+
+/* BRACKET */
+.bracket-wrap{overflow-x:auto;padding-bottom:12px}
+.bracket{display:flex;gap:0;min-width:640px}
+.bracket-round{flex:1;display:flex;flex-direction:column;padding:0 4px;min-width:130px}
+.bracket-spacer{flex:1}
+.bracket-round-label{font-family:'Abril Fatface',serif;font-size:13px;color:var(--green);text-align:center;margin-bottom:8px;padding-bottom:5px;border-bottom:2px solid var(--border)}
+.bracket-match{background:var(--surface);border:2px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+.bracket-match.live{border-color:var(--red)}
+.bracket-team{display:flex;align-items:center;justify-content:space-between;padding:5px 8px;font-size:11px;font-weight:700;border-bottom:1px solid var(--border);gap:4px}
+.bracket-team:last-child{border-bottom:none}
+.bracket-team.winner{background:var(--green-light);color:var(--green)}
+.bracket-team.tbd{color:var(--muted);font-style:italic;font-size:10px}
+.bracket-team-left{display:flex;align-items:center;gap:3px;flex:1;min-width:0}
+.bracket-team-left span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
+.bracket-score{font-family:'Abril Fatface',serif;font-size:13px;color:var(--green);flex-shrink:0;min-width:14px;text-align:right}
+.bracket-owner{font-size:9px;color:var(--muted);font-weight:800;white-space:nowrap;flex-shrink:0;background:var(--surface2);border-radius:3px;padding:1px 4px;border:1px solid var(--border)}
+
+/* FORM DOTS */
+.form-dots{display:inline-flex;gap:2px;margin-left:5px;vertical-align:middle}
+.form-dot{width:7px;height:7px;border-radius:50%}
+.form-w{background:#2d6a4f}.form-d{background:#f4a500}.form-l{background:#c1121f}.form-tbd{background:#d4c8a8}
 </style>
 </head>
 <body>
@@ -217,6 +254,13 @@ body{background:var(--bg);color:var(--text);font-family:'Nunito',sans-serif;font
 <div class="sync-bar offline" id="sync-bar">
   <div class="sync-dot"></div>
   <span id="sync-text">Connecting...</span>
+</div>
+
+<div class="live-ticker" id="live-ticker">
+  <div class="ticker-inner">
+    <div class="ticker-label"><div class="ticker-dot"></div>LIVE</div>
+    <div class="ticker-scroll"><div class="ticker-track" id="ticker-track"></div></div>
+  </div>
 </div>
 
 <div class="hero">
@@ -374,6 +418,27 @@ const KO_ROUNDS = [
 
 const ADMIN_PASSWORD = "greenMachines26";
 
+// ── HELPERS ───────────────────────────────────────────────
+// Get sweepstake owner(s) for a team
+function ownerOf(team){
+  return PARTICIPANTS.filter(p=>(PRESET_TEAMS[p]||[]).includes(team));
+}
+
+// Get form (last N results) for a team
+function getForm(team, n=3){
+  const gid = Object.keys(GROUPS).find(g=>GROUPS[g].includes(team));
+  if(!gid) return [];
+  const played = allGroupMatches.filter(m=>(m.home===team||m.away===team)).map(m=>{
+    const sc = scores[m.home+'_'+m.away];
+    if(!sc||sc.hs==null||sc.as==null) return null;
+    const h=+sc.hs,a=+sc.as;
+    if(isNaN(h)||isNaN(a)) return null;
+    if(m.home===team) return h>a?'W':h<a?'L':'D';
+    else return a>h?'W':a<h?'L':'D';
+  }).filter(Boolean);
+  return played.slice(-n);
+}
+
 let allGroupMatches = [];
 Object.entries(GROUPS).forEach(([g,teams])=>{
   for(let i=0;i<teams.length;i++)
@@ -422,7 +487,7 @@ onValue(teamStatsRef,   s=>{ teamStats   = s.val()||[]; sync(); });
 onValue(teamCardsRef,   s=>{ teamCards   = s.val()||{}; sync(); });
 onValue(ref(db,'.info/connected'), s=>{ s.val()?setSyncOn():setSyncOff(); });
 
-function sync(){ renderHeroStats(); refreshPanel(); }
+function sync(){ renderHeroStats(); updateTicker(); refreshPanel(); }
 function setSyncOn(){ document.getElementById('sync-bar').classList.remove('offline'); document.getElementById('sync-text').textContent='Live — updates sync to everyone instantly'; }
 function setSyncOff(){ document.getElementById('sync-bar').classList.add('offline'); document.getElementById('sync-text').textContent='Offline — reconnecting...'; }
 function saveScores()  { set(scoresRef, scores); }
@@ -453,7 +518,111 @@ function updateAdminUI(){
   else{ btn.classList.remove('active'); btn.textContent='🔒 Admin mode'; hint.textContent='View-only — scores update live'; rb.style.display='none'; }
 }
 
-// ── GROUP HELPERS ─────────────────────────────────────────
+// ── LIVE TICKER ───────────────────────────────────────────
+function updateTicker(){
+  // Show live matches from koMatches with 'live' status, or group scores that are partial
+  // Since we store scores as final, we simulate "live" by checking if score exists but group isn't done
+  const liveItems = [];
+
+  // Group matches — show in-progress groups (have some scores but not complete)
+  Object.keys(GROUPS).forEach(gid=>{
+    const ms = allGroupMatches.filter(m=>m.g===gid);
+    ms.forEach(m=>{
+      const sc = scores[m.home+'_'+m.away];
+      if(!sc||sc.hs==null||sc.as==null) return;
+      // Show recent/live matches — all scored group matches appear in ticker
+      const homeOwners = ownerOf(m.home).join(', ');
+      const awayOwners = ownerOf(m.away).join(', ');
+      liveItems.push({
+        home:m.home, away:m.away,
+        hs:sc.hs, as:sc.as,
+        homeOwners, awayOwners,
+        live: false
+      });
+    });
+  });
+
+  // KO matches
+  KO_ROUNDS.forEach(round=>{
+    for(let i=0;i<round.matches;i++){
+      const m = koMatches[round.id+'_'+i];
+      if(!m||!m.home||!m.away||m.hs==null||m.as==null) continue;
+      const homeOwners = ownerOf(m.home).join(', ');
+      const awayOwners = ownerOf(m.away).join(', ');
+      liveItems.push({home:m.home,away:m.away,hs:m.hs,as:m.as,homeOwners,awayOwners,live:false,round:round.label});
+    }
+  });
+
+  const ticker = document.getElementById('live-ticker');
+  const track  = document.getElementById('ticker-track');
+  if(!liveItems.length){ ticker.classList.remove('active'); return; }
+
+  ticker.classList.add('active');
+  // Double items for seamless loop
+  const items = [...liveItems,...liveItems];
+  track.innerHTML = items.map(it=>`
+    <div class="ticker-item">
+      <span>${FLAGS[it.home]||''} ${it.home}</span>
+      <span class="ticker-score">${it.hs} – ${it.as}</span>
+      <span>${FLAGS[it.away]||''} ${it.away}</span>
+      ${it.homeOwners||it.awayOwners?`<span class="ticker-owners">(${it.homeOwners||'?'} vs ${it.awayOwners||'?'})</span>`:''}
+      ${it.round?`<span class="ticker-minute">${it.round}</span>`:''}
+    </div>`).join('');
+}
+
+// ── FORM DOTS HTML ────────────────────────────────────────
+function formDotsHtml(team){
+  const form = getForm(team, 3);
+  if(!form.length) return '';
+  const dots = form.map(r=>`<span class="form-dot form-${r.toLowerCase()}"></span>`).join('');
+  return `<span class="form-dots">${dots}</span>`;
+}
+
+// ── KNOCKOUT BRACKET ──────────────────────────────────────
+function renderBracket(){
+  const rounds = [
+    {id:'r32', label:'R32', matches:16},
+    {id:'r16', label:'R16', matches:8},
+    {id:'qf',  label:'QF',  matches:4},
+    {id:'sf',  label:'SF',  matches:2},
+    {id:'final',label:'Final', matches:1},
+  ];
+
+  let html=`<div class="bracket-wrap"><div class="bracket">`;
+  rounds.forEach(round=>{
+    html+=`<div class="bracket-round"><div class="bracket-round-label">${round.label}</div>`;
+    // Space matches evenly
+    const spacer = round.matches < 16 ? `<div class="bracket-spacer" style="flex:${(16/round.matches - 1)/2}"></div>` : '';
+    for(let i=0;i<round.matches;i++){
+      if(spacer && i>0) html+=`<div class="bracket-spacer" style="flex:${16/round.matches - 1}"></div>`;
+      if(spacer && i===0) html+=`<div class="bracket-spacer" style="flex:${(16/round.matches - 1)/2}"></div>`;
+      const key=round.id+'_'+i;
+      const m=koMatches[key]||{};
+      const has=m.home&&m.away&&m.hs!=null&&m.as!=null&&!isNaN(+m.hs)&&!isNaN(+m.as);
+      const winner=has?(+m.hs>+m.as?m.home:+m.as>+m.hs?m.away:m.winner||null):null;
+
+      const teamRow=(team, score)=>{
+        if(!team) return `<div class="bracket-team tbd"><div class="bracket-team-left"><span>TBD</span></div></div>`;
+        const owners=ownerOf(team);
+        const isWin=winner===team;
+        return `<div class="bracket-team ${isWin?'winner':''}">
+          <div class="bracket-team-left"><span class="flag" style="font-size:12px">${FLAGS[team]||''}</span><span>${team}</span></div>
+          ${owners.length?`<span class="bracket-owner">${owners[0]}</span>`:''}
+          <span class="bracket-score">${score!=null?score:''}</span>
+        </div>`;
+      };
+
+      html+=`<div class="bracket-match">
+        ${teamRow(m.home||null, has?m.hs:null)}
+        ${teamRow(m.away||null, has?m.as:null)}
+      </div>`;
+    }
+    if(spacer) html+=`<div class="bracket-spacer" style="flex:${(16/round.matches - 1)/2}"></div>`;
+    html+=`</div>`;
+  });
+  html+=`</div></div>`;
+  return html;
+}
 function getStandings(gid){
   const tbl={};
   GROUPS[gid].forEach(t=>tbl[t]={p:0,w:0,d:0,l:0,gf:0,ga:0,pts:0});
@@ -563,7 +732,7 @@ function renderGroups(){
     st.forEach((t,i)=>{
       const rc=done?(i<2?'qualified':'eliminated'):'';
       const badge=done?(i<2?`<span class="q-badge">Q</span>`:`<span class="out-badge">OUT</span>`):'';
-      html+=`<tr class="${rc}"><td><div class="team-cell"><span class="flag">${FLAGS[t.name]||''}</span>${t.name}${badge}</div></td>
+      html+=`<tr class="${rc}"><td><div class="team-cell"><span class="flag">${FLAGS[t.name]||''}</span>${t.name}${formDotsHtml(t.name)}${badge}</div></td>
         <td>${t.p}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td>
         <td>${t.gd>0?'+':''}${t.gd}</td><td class="pts-cell">${t.pts}</td></tr>`;
     });
@@ -627,6 +796,11 @@ function getQualifiedTeams(){
 function renderKnockouts(){
   let html='';
   if(!isAdmin) html+=`<div class="readonly-banner">👀 View-only — updates live</div>`;
+
+  html+=`<div style="margin-bottom:24px">
+    <div style="font-family:'Abril Fatface',serif;font-size:20px;color:var(--green);margin-bottom:10px">🏆 Tournament Bracket</div>
+    ${renderBracket()}
+  </div>`;
 
   html+=`<div style="background:var(--gold-light);border:2px solid var(--gold);border-radius:var(--radius);padding:10px 16px;margin-bottom:18px;font-size:12px;font-weight:700;color:#7a5a00">
     🏆 Knockout bonus points: R32 +${KO_PTS.r32} · R16 +${KO_PTS.r16} · QF +${KO_PTS.qf} · SF +${KO_PTS.sf} · Final +${KO_PTS.final} · Winner bonus +${KO_PTS.winner} — added on top of group points
@@ -841,32 +1015,45 @@ window.resetScores=()=>{
 
 // ── PANELS ────────────────────────────────────────────────
 // ── GOLDEN BOOT ───────────────────────────────────────────
+function getPickerOf(playerName){
+  // Match loosely — API names may differ slightly
+  return PARTICIPANTS.filter(p=>{
+    return (GOLDEN_BOOT_PICKS[p]||[]).some(pick=>
+      pick.toLowerCase().includes(playerName.toLowerCase().split(' ').pop()) ||
+      playerName.toLowerCase().includes(pick.toLowerCase().split(' ').pop())
+    );
+  });
+}
+
 function renderGoldenBoot(){
   const el = document.getElementById('panel-golden-boot');
   if(!topScorers.length){
     el.innerHTML=`<div class="empty"><div class="empty-icon">👟</div>No data yet — updates once matches are played.</div>`;
     return;
   }
-  let html=`<div style="margin-bottom:16px;font-size:12px;color:var(--muted);font-weight:700">Top 20 scorers · live from API-Football · updates every 5 mins</div>
+  const scorerArr = Array.isArray(topScorers)?topScorers:Object.values(topScorers);
+  let html=`<div style="margin-bottom:16px;font-size:12px;color:var(--muted);font-weight:700">Top scorers · live · updates every 5 mins</div>
   <div style="background:var(--surface);border:2px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow)">
   <div style="display:grid;grid-template-columns:36px 1fr 40px 40px 40px;gap:6px;padding:8px 14px;background:var(--green);font-size:10px;font-weight:800;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.08em">
     <div></div><div>Player</div><div style="text-align:center">⚽</div><div style="text-align:center">🎯</div><div style="text-align:center">🎮</div>
   </div>`;
-  topScorers.forEach((p,i)=>{
-    const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
-    const bg = i===0?'background:var(--gold-light)':i===1?'background:#f8f8f8':i===2?'background:#fff7f0':'';
+  scorerArr.forEach((p,i)=>{
+    const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+    const bg=i===0?'background:var(--gold-light)':i===1?'background:#f8f8f8':i===2?'background:#fff7f0':'';
+    const pickers=getPickerOf(p.name);
     html+=`<div style="display:grid;grid-template-columns:36px 1fr 40px 40px 40px;gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:center;${bg}">
       <div style="font-family:'Abril Fatface',serif;font-size:18px;color:var(--muted);text-align:center">${medal||i+1}</div>
       <div>
         <div style="font-weight:800;font-size:13px">${p.name}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:1px">${FLAGS[p.team]||''} ${p.team}</div>
+        ${pickers.length?`<div style="font-size:10px;color:var(--green);font-weight:800;margin-top:2px">🎯 ${pickers.join(', ')}</div>`:''}
       </div>
       <div style="text-align:center;font-family:'Abril Fatface',serif;font-size:20px;color:var(--green)">${p.goals}</div>
       <div style="text-align:center;font-size:13px;font-weight:700;color:var(--muted)">${p.assists||0}</div>
       <div style="text-align:center;font-size:11px;color:var(--muted)">${p.games||0}</div>
     </div>`;
   });
-  html+=`</div><div style="font-size:10px;color:var(--muted);margin-top:8px;text-align:center">⚽ Goals &nbsp;·&nbsp; 🎯 Assists &nbsp;·&nbsp; 🎮 Games</div>`;
+  html+=`</div><div style="font-size:10px;color:var(--muted);margin-top:8px;text-align:center">⚽ Goals &nbsp;·&nbsp; 🎯 Assists &nbsp;·&nbsp; 🎮 Games &nbsp;·&nbsp; Green name = your sweepstake pick</div>`;
   el.innerHTML=html;
 }
 
