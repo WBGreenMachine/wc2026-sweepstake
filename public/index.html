@@ -52,7 +52,8 @@ body{background:var(--bg);color:var(--text);font-family:'Nunito',sans-serif;font
 .btn-danger{background:transparent;color:var(--red);border-color:rgba(193,18,31,.3)}.btn-danger:hover{background:var(--red-light)}
 
 /* NAV */
-.nav{background:var(--surface);border-bottom:2px solid var(--border);padding:0 20px;position:sticky;top:0;z-index:50;display:flex;overflow-x:auto;box-shadow:var(--shadow)}
+.nav{background:var(--surface);border-bottom:2px solid var(--border);padding:0 20px;position:sticky;top:0;z-index:50;display:flex;overflow-x:auto;overflow-y:hidden;box-shadow:var(--shadow);-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
 .nav-tab{padding:13px 14px;font-size:11px;font-weight:800;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap;text-transform:uppercase;letter-spacing:.08em;transition:color .15s,border-color .15s}
 .nav-tab:hover{color:var(--text)}
 .nav-tab.active{color:var(--green);border-bottom-color:var(--green)}
