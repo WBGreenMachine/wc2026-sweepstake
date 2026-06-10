@@ -6,6 +6,7 @@
 <title>Green Machines WC 2026 🏆</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://twemoji.maxcdn.com/v/latest/twemoji.min.js" crossorigin="anonymous"></script>
 <style>
 :root {
   --bg:#fdf6e3;--surface:#fff;--surface2:#fef9ee;--border:#e8dfc8;--border2:#d4c8a8;
@@ -35,6 +36,9 @@ body{background:var(--bg);color:var(--text);font-family:'Nunito',sans-serif;font
 .stat-block{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:var(--radius);padding:10px 16px;text-align:center;min-width:70px}
 .stat-num{font-family:'Abril Fatface',serif;font-size:28px;color:var(--gold);line-height:1}
 .stat-label{font-size:9px;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.1em;margin-top:2px;font-weight:700}
+
+/* COMPLETE GROUP CARD */
+.group-card.done{border-color:var(--gold);box-shadow:0 2px 12px rgba(244,165,0,.15)}
 
 /* ADMIN BAR */
 .admin-bar{background:#1a1a2e;padding:8px 20px;display:flex;align-items:center;gap:12px}
@@ -209,13 +213,22 @@ body{background:var(--bg);color:var(--text);font-family:'Nunito',sans-serif;font
 
 @media(max-width:580px){
   .hero{padding:20px 14px 16px}.main{padding:14px}.nav{padding:0 14px}
-  .hero-stats{display:none}
+  .hero-stats{gap:6px}
+  .stat-block{padding:7px 10px;min-width:56px}
+  .stat-num{font-size:20px}
+  .stat-label{font-size:8px}
 }
 
 /* TOGGLE */
 .toggle-bar{display:flex;gap:0;background:var(--surface2);border:2px solid var(--border);border-radius:50px;padding:3px;margin-bottom:18px;width:fit-content}
 .toggle-btn{padding:6px 18px;border-radius:50px;border:none;background:transparent;font-family:'Nunito',sans-serif;font-size:12px;font-weight:800;cursor:pointer;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;transition:all .15s}
 .toggle-btn.active{background:var(--green);color:#fff;box-shadow:0 2px 8px rgba(45,106,79,.3)}
+
+/* TWEMOJI FLAG FIX */
+.flag{font-family:"Twemoji Mozilla","Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","EmojiOne Color","Android Emoji",sans-serif;font-size:15px;flex-shrink:0}
+
+/* LAST UPDATED */
+.last-updated{background:var(--surface2);border-bottom:1px solid var(--border);padding:4px 20px;font-size:10px;color:var(--muted);font-weight:700;text-align:right;letter-spacing:.04em}
 
 /* LIVE TICKER */
 .live-ticker{display:none;background:#c1121f;color:#fff;overflow:hidden}
@@ -286,6 +299,7 @@ body{background:var(--bg);color:var(--text);font-family:'Nunito',sans-serif;font
   <button class="admin-toggle" id="admin-toggle" onclick="toggleAdmin()">🔒 Admin mode</button>
   <span class="admin-hint" id="admin-hint">View-only — scores update live</span>
 </div>
+<div class="last-updated" id="last-updated">Waiting for data...</div>
 
 <nav class="nav">
   <div class="nav-tab active" onclick="showPanel('sweepstake',this)">🎲 Sweepstake</div>
@@ -489,7 +503,16 @@ onValue(teamStatsRef,   s=>{ teamStats   = s.val()||[]; sync(); });
 onValue(teamCardsRef,   s=>{ teamCards   = s.val()||{}; sync(); });
 onValue(ref(db,'.info/connected'), s=>{ s.val()?setSyncOn():setSyncOff(); });
 
-function sync(){ renderHeroStats(); updateTicker(); refreshPanel(); }
+function sync(){
+  renderHeroStats();
+  updateTicker();
+  refreshPanel();
+  // Update last updated timestamp
+  const now = new Date();
+  const time = now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const el = document.getElementById('last-updated');
+  if(el) el.textContent = `Last updated: ${time}`;
+}
 function setSyncOn(){ document.getElementById('sync-bar').classList.remove('offline'); document.getElementById('sync-text').textContent='Live — updates sync to everyone instantly'; }
 function setSyncOff(){ document.getElementById('sync-bar').classList.add('offline'); document.getElementById('sync-text').textContent='Offline — reconnecting...'; }
 function saveScores()  { set(scoresRef, scores); }
@@ -1164,7 +1187,7 @@ function renderGroupStage(){
     keys.forEach(gid=>{
       const show=activeGroupFilter==='all'||activeGroupFilter===gid;
       const st=getStandings(gid);const done=groupComplete(gid);
-      html+=`<div class="group-card" style="${show?'':'display:none'}">
+      html+=`<div class="group-card ${done?'done':''}" style="${show?'':'display:none'}">
         <div class="group-card-header"><span class="group-label">Group ${gid}</span>${done?'<span class="complete-pill">✓ Done</span>':''}</div>
         <table class="group-table"><tr><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th></tr>`;
       st.forEach((t,i)=>{
@@ -1287,6 +1310,13 @@ function goalscorerRow(key) {
 
 renderHeroStats();
 renderSweepstake();
+
+// Parse emoji flags for desktop compatibility
+function parseEmoji(){ if(window.twemoji) twemoji.parse(document.body,{folder:'svg',ext:'.svg'}); }
+// Re-parse whenever content changes
+const emojiObserver = new MutationObserver(()=>parseEmoji());
+emojiObserver.observe(document.body,{childList:true,subtree:true});
+parseEmoji();
 </script>
 </body>
 </html>
