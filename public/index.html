@@ -212,6 +212,11 @@ body{background:var(--bg);color:var(--text);font-family:'Nunito',sans-serif;font
   .hero-stats{display:none}
 }
 
+/* TOGGLE */
+.toggle-bar{display:flex;gap:0;background:var(--surface2);border:2px solid var(--border);border-radius:50px;padding:3px;margin-bottom:18px;width:fit-content}
+.toggle-btn{padding:6px 18px;border-radius:50px;border:none;background:transparent;font-family:'Nunito',sans-serif;font-size:12px;font-weight:800;cursor:pointer;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;transition:all .15s}
+.toggle-btn.active{background:var(--green);color:#fff;box-shadow:0 2px 8px rgba(45,106,79,.3)}
+
 /* LIVE TICKER */
 .live-ticker{display:none;background:#c1121f;color:#fff;overflow:hidden}
 .live-ticker.active{display:block}
@@ -283,27 +288,23 @@ body{background:var(--bg);color:var(--text);font-family:'Nunito',sans-serif;font
 </div>
 
 <nav class="nav">
-  <div class="nav-tab active" onclick="showPanel('groups',this)">📊 Groups</div>
-  <div class="nav-tab" onclick="showPanel('matches',this)">⚽ Matches</div>
+  <div class="nav-tab active" onclick="showPanel('sweepstake',this)">🎲 Sweepstake</div>
+  <div class="nav-tab" onclick="showPanel('leaderboard',this)">🥇 Leaderboard</div>
+  <div class="nav-tab" onclick="showPanel('golden-boot',this)">👟 Golden Boot</div>
+  <div class="nav-tab" onclick="showPanel('group-stage',this)">⚽ Group Stage</div>
   <div class="nav-tab" onclick="showPanel('knockouts',this)">🏆 Knockouts</div>
   <div class="nav-tab" onclick="showPanel('qualified',this)">✅ In / Out</div>
-  <div class="nav-tab" onclick="showPanel('sweepstake',this)">🎲 Sweepstake</div>
-  <div class="nav-tab" onclick="showPanel('golden-boot',this)">👟 Golden Boot</div>
-  <div class="nav-tab" onclick="showPanel('teams',this)">📊 Teams</div>
-  <div class="nav-tab" onclick="showPanel('players',this)">⚽ Players</div>
-  <div class="nav-tab" onclick="showPanel('leaderboard',this)">🥇 Leaderboard</div>
+  <div class="nav-tab" onclick="showPanel('stats',this)">📈 Stats</div>
 </nav>
 
 <div class="main">
-  <div id="panel-groups"     class="panel active"></div>
-  <div id="panel-matches"    class="panel"></div>
-  <div id="panel-knockouts"  class="panel"></div>
-  <div id="panel-qualified"  class="panel"></div>
-  <div id="panel-sweepstake" class="panel"></div>
+  <div id="panel-sweepstake"  class="panel active"></div>
+  <div id="panel-leaderboard" class="panel"></div>
   <div id="panel-golden-boot" class="panel"></div>
-  <div id="panel-teams"        class="panel"></div>
-  <div id="panel-players"      class="panel"></div>
-  <div id="panel-leaderboard"  class="panel"></div>
+  <div id="panel-group-stage" class="panel"></div>
+  <div id="panel-knockouts"   class="panel"></div>
+  <div id="panel-qualified"   class="panel"></div>
+  <div id="panel-stats"       class="panel"></div>
 </div>
 
 <div class="modal-overlay" id="admin-modal">
@@ -454,7 +455,7 @@ let players   = {};   // sweepstake assignments: { "Kyle": ["Spain","Morocco",..
 
 let isAdmin = false;
 let activeGroupFilter = 'all';
-let currentPanel = 'groups';
+let currentPanel = 'sweepstake';
 
 // ── FIREBASE ──────────────────────────────────────────────
 const scoresRef      = ref(db,'scores');
@@ -1145,16 +1146,121 @@ function renderPlayers(){
   el.innerHTML=html;
 }
 
+// ── GROUP STAGE (combined groups + matches) ───────────────
+let groupStageView = 'tables'; // 'tables' or 'matches'
+function renderGroupStage(){
+  const el = document.getElementById('panel-group-stage');
+  let html = `<div class="toggle-bar">
+    <button class="toggle-btn ${groupStageView==='tables'?'active':''}" onclick="setGroupStageView('tables')">📊 Tables</button>
+    <button class="toggle-btn ${groupStageView==='matches'?'active':''}" onclick="setGroupStageView('matches')">⚽ Matches</button>
+  </div>`;
+  if(groupStageView==='tables'){
+    // Groups content
+    const keys=Object.keys(GROUPS);
+    html+=`<div class="filter-row"><span class="filter-label">Filter</span>
+      <button class="filter-btn ${activeGroupFilter==='all'?'active':''}" onclick="setGF('all')">All</button>`;
+    keys.forEach(g=>{html+=`<button class="filter-btn ${activeGroupFilter===g?'active':''}" onclick="setGF('${g}')">Grp ${g}</button>`;});
+    html+=`</div><div class="groups-grid">`;
+    keys.forEach(gid=>{
+      const show=activeGroupFilter==='all'||activeGroupFilter===gid;
+      const st=getStandings(gid);const done=groupComplete(gid);
+      html+=`<div class="group-card" style="${show?'':'display:none'}">
+        <div class="group-card-header"><span class="group-label">Group ${gid}</span>${done?'<span class="complete-pill">✓ Done</span>':''}</div>
+        <table class="group-table"><tr><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th></tr>`;
+      st.forEach((t,i)=>{
+        const rc=done?(i<2?'qualified':'eliminated'):'';
+        const badge=done?(i<2?`<span class="q-badge">Q</span>`:`<span class="out-badge">OUT</span>`):'';
+        html+=`<tr class="${rc}"><td><div class="team-cell"><span class="flag">${FLAGS[t.name]||''}</span>${t.name}${formDotsHtml(t.name)}${badge}</div></td>
+          <td>${t.p}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td>
+          <td>${t.gd>0?'+':''}${t.gd}</td><td class="pts-cell">${t.pts}</td></tr>`;
+      });
+      html+=`</table></div>`;
+    });
+    html+=`</div>`;
+  } else {
+    // Matches content
+    if(!isAdmin) html+=`<div class="readonly-banner">👀 View-only — scores update live</div>`;
+    Object.keys(GROUPS).forEach(gid=>{
+      html+=`<div class="matches-section"><div class="matches-group-title">⚽ Group ${gid}</div><div class="matches-list">`;
+      allGroupMatches.filter(m=>m.g===gid).forEach(m=>{
+        const key=m.home+'_'+m.away;const sc=scores[key]||{};
+        const has=sc.hs!=null&&sc.as!=null&&!isNaN(+sc.hs)&&!isNaN(+sc.as);
+        if(isAdmin){
+          html+=`<div class="match-row ${has?'has-score':''}">
+            <div class="match-home">${m.home} <span class="flag">${FLAGS[m.home]||''}</span></div>
+            <div class="score-center">
+              <input class="score-inp" type="number" min="0" max="99" value="${sc.hs!=null?sc.hs:''}" placeholder="?" oninput="setScore('${key}','hs',this.value)">
+              <span class="score-sep">–</span>
+              <input class="score-inp" type="number" min="0" max="99" value="${sc.as!=null?sc.as:''}" placeholder="?" oninput="setScore('${key}','as',this.value)">
+            </div>
+            <div class="match-away"><span class="flag">${FLAGS[m.away]||''}</span> ${m.away}</div>
+          </div>${goalscorerRow(key)}`;
+        } else {
+          html+=`<div class="match-row ${has?'has-score':''}">
+            <div class="match-home">${m.home} <span class="flag">${FLAGS[m.home]||''}</span></div>
+            <div class="score-center"><span class="score-static">${has?sc.hs:'?'}</span><span class="score-sep">–</span><span class="score-static">${has?sc.as:'?'}</span></div>
+            <div class="match-away"><span class="flag">${FLAGS[m.away]||''}</span> ${m.away}</div>
+          </div>${goalscorerRow(key)}`;
+        }
+      });
+      html+=`</div></div>`;
+    });
+  }
+  el.innerHTML = html;
+}
+window.setGroupStageView = v => { groupStageView=v; renderGroupStage(); };
+
+// ── STATS (combined teams + players) ─────────────────────
+let statsView = 'teams'; // 'teams' or 'players'
+function renderStats(){
+  const el = document.getElementById('panel-stats');
+  let html = `<div class="toggle-bar">
+    <button class="toggle-btn ${statsView==='teams'?'active':''}" onclick="setStatsView('teams')">📊 Teams</button>
+    <button class="toggle-btn ${statsView==='players'?'active':''}" onclick="setStatsView('players')">⚽ Players</button>
+  </div>`;
+  if(statsView==='teams'){
+    if(!teamStats.length&&!Object.keys(teamCards).length){
+      html+=`<div class="empty"><div class="empty-icon">📊</div>No data yet — updates once matches are played.</div>`;
+    } else {
+      const ts=Array.isArray(teamStats)?teamStats:Object.values(teamStats);
+      const byGoalsFor=    [...ts].sort((a,b)=>b.goalsFor-a.goalsFor).slice(0,5);
+      const byGoalsAgainst=[...ts].filter(t=>t.played>0).sort((a,b)=>a.goalsAgainst-b.goalsAgainst).slice(0,5);
+      const withCards=Object.entries(teamCards).map(([name,c])=>({name,...c}));
+      const byYellows=[...withCards].sort((a,b)=>b.yellows-a.yellows).slice(0,5);
+      const byReds=   [...withCards].sort((a,b)=>b.reds-a.reds).slice(0,5);
+      html+=statTable('Most Goals Scored','⚽',byGoalsFor,'Goals','goalsFor','Played','played');
+      html+=statTable('Best Defence','🛡️',byGoalsAgainst,'Conceded','goalsAgainst','Played','played');
+      html+=statTable('Most Yellow Cards','🟨',byYellows,'Yellows','yellows','Reds','reds');
+      if(byReds.some(r=>r.reds>0)) html+=statTable('Most Red Cards','🟥',byReds,'Reds','reds','Yellows','yellows');
+    }
+  } else {
+    if(!topAssists.length&&!topYellows.length){
+      html+=`<div class="empty"><div class="empty-icon">⚽</div>No data yet — updates once matches are played.</div>`;
+    } else {
+      const assists5= (Array.isArray(topAssists)?topAssists:Object.values(topAssists)).slice(0,5);
+      const yellows5= (Array.isArray(topYellows)?topYellows:Object.values(topYellows)).slice(0,5);
+      const reds5=    (Array.isArray(topReds)?topReds:Object.values(topReds)).filter(p=>p.reds>0).slice(0,5);
+      const shots5=   [...(Array.isArray(topScorers)?topScorers:Object.values(topScorers))].sort((a,b)=>b.shots-a.shots).slice(0,5);
+      const dribbles5=[...(Array.isArray(topScorers)?topScorers:Object.values(topScorers))].sort((a,b)=>b.dribbles-a.dribbles).slice(0,5);
+      html+=playerStatTable('Top Assists','🎯',assists5,'Assists','assists','Games','games');
+      html+=playerStatTable('Most Shots','🔫',shots5,'Shots','shots','Goals','goals');
+      html+=playerStatTable('Most Dribbles','🕺',dribbles5,'Dribbles','dribbles','Goals','goals');
+      html+=playerStatTable('Most Yellow Cards','🟨',yellows5,'Yellows','yellows','Reds','reds');
+      if(reds5.length) html+=playerStatTable('Most Red Cards','🟥',reds5,'Reds','reds','Yellows','yellows');
+    }
+  }
+  el.innerHTML = html;
+}
+window.setStatsView = v => { statsView=v; renderStats(); };
+
 function refreshPanel(){
-  if(currentPanel==='groups')       renderGroups();
-  else if(currentPanel==='matches')      renderMatches();
+  if(currentPanel==='sweepstake')   renderSweepstake();
+  else if(currentPanel==='leaderboard')  renderLeaderboard();
+  else if(currentPanel==='golden-boot')  renderGoldenBoot();
+  else if(currentPanel==='group-stage')  renderGroupStage();
   else if(currentPanel==='knockouts')    renderKnockouts();
   else if(currentPanel==='qualified')    renderQualified();
-  else if(currentPanel==='sweepstake')   renderSweepstake();
-  else if(currentPanel==='golden-boot')  renderGoldenBoot();
-  else if(currentPanel==='teams')        renderTeams();
-  else if(currentPanel==='players')      renderPlayers();
-  else if(currentPanel==='leaderboard')  renderLeaderboard();
+  else if(currentPanel==='stats')        renderStats();
 }
 
 window.showPanel=(name,tab)=>{
@@ -1163,7 +1269,7 @@ window.showPanel=(name,tab)=>{
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('panel-'+name).classList.add('active');
   if(tab) tab.classList.add('active');
-  else{const idx={groups:0,matches:1,knockouts:2,qualified:3,sweepstake:4,'golden-boot':5,teams:6,players:7,leaderboard:8}[name];document.querySelectorAll('.nav-tab')[idx].classList.add('active');}
+  else{const idx={sweepstake:0,leaderboard:1,'golden-boot':2,'group-stage':3,knockouts:4,qualified:5,stats:6}[name];document.querySelectorAll('.nav-tab')[idx].classList.add('active');}
   refreshPanel();
 };
 
@@ -1180,7 +1286,7 @@ function goalscorerRow(key) {
 }
 
 renderHeroStats();
-renderGroups();
+renderSweepstake();
 </script>
 </body>
 </html>
