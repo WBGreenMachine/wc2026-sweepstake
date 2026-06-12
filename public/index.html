@@ -369,12 +369,93 @@ const KO_ROUNDS = [
 ];
 const ADMIN_PASSWORD = "greenMachines26";
 
-let allGroupMatches = [];
-Object.entries(GROUPS).forEach(([g,teams])=>{
-  for(let i=0;i<teams.length;i++)
-    for(let j=i+1;j<teams.length;j++)
-      allGroupMatches.push({g,home:teams[i],away:teams[j]});
-});
+// Hardcoded group matches with BST kickoff times
+const allGroupMatches = [
+  // Group A
+  {g:'A',home:'Mexico',away:'South Africa',ko:'11 Jun, 21:00'},
+  {g:'A',home:'South Korea',away:'Czechia',ko:'12 Jun, 03:00'},
+  {g:'A',home:'Mexico',away:'South Korea',ko:'16 Jun, 03:00'},
+  {g:'A',home:'Czechia',away:'South Africa',ko:'16 Jun, 18:00'},
+  {g:'A',home:'Czechia',away:'Mexico',ko:'20 Jun, 21:00'},
+  {g:'A',home:'South Africa',away:'South Korea',ko:'20 Jun, 21:00'},
+  // Group B
+  {g:'B',home:'Canada',away:'Bosnia-Herzegovina',ko:'12 Jun, 20:00'},
+  {g:'B',home:'Qatar',away:'Switzerland',ko:'12 Jun, 23:00'},
+  {g:'B',home:'Switzerland',away:'Bosnia-Herzegovina',ko:'17 Jun, 20:00'},
+  {g:'B',home:'Canada',away:'Qatar',ko:'17 Jun, 23:00'},
+  {g:'B',home:'Bosnia-Herzegovina',away:'Qatar',ko:'21 Jun, 20:00'},
+  {g:'B',home:'Switzerland',away:'Canada',ko:'21 Jun, 20:00'},
+  // Group C
+  {g:'C',home:'Brazil',away:'Haiti',ko:'13 Jun, 00:00'},
+  {g:'C',home:'Morocco',away:'Scotland',ko:'13 Jun, 03:00'},
+  {g:'C',home:'Brazil',away:'Morocco',ko:'17 Jun, 03:00'},
+  {g:'C',home:'Scotland',away:'Haiti',ko:'17 Jun, 00:00'},
+  {g:'C',home:'Haiti',away:'Morocco',ko:'21 Jun, 23:00'},
+  {g:'C',home:'Scotland',away:'Brazil',ko:'21 Jun, 23:00'},
+  // Group D
+  {g:'D',home:'United States',away:'Turkey',ko:'13 Jun, 20:00'},
+  {g:'D',home:'Paraguay',away:'Australia',ko:'13 Jun, 23:00'},
+  {g:'D',home:'United States',away:'Paraguay',ko:'18 Jun, 20:00'},
+  {g:'D',home:'Turkey',away:'Australia',ko:'18 Jun, 23:00'},
+  {g:'D',home:'Australia',away:'United States',ko:'22 Jun, 20:00'},
+  {g:'D',home:'Turkey',away:'Paraguay',ko:'22 Jun, 20:00'},
+  // Group E
+  {g:'E',home:'Germany',away:'Ivory Coast',ko:'14 Jun, 20:00'},
+  {g:'E',home:'Ecuador',away:'Curacao',ko:'14 Jun, 23:00'},
+  {g:'E',home:'Germany',away:'Ecuador',ko:'18 Jun, 03:00'},
+  {g:'E',home:'Ivory Coast',away:'Curacao',ko:'18 Jun, 00:00'},
+  {g:'E',home:'Curacao',away:'Germany',ko:'22 Jun, 23:00'},
+  {g:'E',home:'Ivory Coast',away:'Ecuador',ko:'22 Jun, 23:00'},
+  // Group F
+  {g:'F',home:'Netherlands',away:'Sweden',ko:'14 Jun, 23:00'},
+  {g:'F',home:'Japan',away:'Tunisia',ko:'15 Jun, 02:00'},
+  {g:'F',home:'Netherlands',away:'Japan',ko:'19 Jun, 20:00'},
+  {g:'F',home:'Sweden',away:'Tunisia',ko:'19 Jun, 23:00'},
+  {g:'F',home:'Tunisia',away:'Netherlands',ko:'23 Jun, 20:00'},
+  {g:'F',home:'Sweden',away:'Japan',ko:'23 Jun, 20:00'},
+  // Group G
+  {g:'G',home:'Belgium',away:'Egypt',ko:'15 Jun, 20:00'},
+  {g:'G',home:'Iran',away:'New Zealand',ko:'15 Jun, 23:00'},
+  {g:'G',home:'Belgium',away:'Iran',ko:'19 Jun, 03:00'},
+  {g:'G',home:'Egypt',away:'New Zealand',ko:'19 Jun, 00:00'},
+  {g:'G',home:'New Zealand',away:'Belgium',ko:'23 Jun, 23:00'},
+  {g:'G',home:'Egypt',away:'Iran',ko:'23 Jun, 23:00'},
+  // Group H
+  {g:'H',home:'Spain',away:'Uruguay',ko:'15 Jun, 02:00'},
+  {g:'H',home:'Cape Verde',away:'Saudi Arabia',ko:'16 Jun, 00:00'},
+  {g:'H',home:'Spain',away:'Cape Verde',ko:'20 Jun, 00:00'},
+  {g:'H',home:'Uruguay',away:'Saudi Arabia',ko:'20 Jun, 03:00'},
+  {g:'H',home:'Saudi Arabia',away:'Spain',ko:'24 Jun, 20:00'},
+  {g:'H',home:'Uruguay',away:'Cape Verde',ko:'24 Jun, 20:00'},
+  // Group I
+  {g:'I',home:'France',away:'Iraq',ko:'16 Jun, 20:00'},
+  {g:'I',home:'Senegal',away:'Norway',ko:'16 Jun, 23:00'},
+  {g:'I',home:'France',away:'Senegal',ko:'20 Jun, 20:00'},
+  {g:'I',home:'Norway',away:'Iraq',ko:'20 Jun, 23:00'},
+  {g:'I',home:'Iraq',away:'Senegal',ko:'24 Jun, 23:00'},
+  {g:'I',home:'Norway',away:'France',ko:'24 Jun, 23:00'},
+  // Group J
+  {g:'J',home:'Argentina',away:'Algeria',ko:'17 Jun, 00:00'},
+  {g:'J',home:'Jordan',away:'Austria',ko:'17 Jun, 03:00'},
+  {g:'J',home:'Argentina',away:'Jordan',ko:'21 Jun, 00:00'},
+  {g:'J',home:'Austria',away:'Algeria',ko:'21 Jun, 03:00'},
+  {g:'J',home:'Algeria',away:'Jordan',ko:'25 Jun, 20:00'},
+  {g:'J',home:'Austria',away:'Argentina',ko:'25 Jun, 20:00'},
+  // Group K
+  {g:'K',home:'Portugal',away:'Uzbekistan',ko:'17 Jun, 23:00'},
+  {g:'K',home:'DR Congo',away:'Colombia',ko:'18 Jun, 02:00'},
+  {g:'K',home:'Portugal',away:'DR Congo',ko:'22 Jun, 00:00'},
+  {g:'K',home:'Colombia',away:'Uzbekistan',ko:'22 Jun, 03:00'},
+  {g:'K',home:'Uzbekistan',away:'DR Congo',ko:'26 Jun, 20:00'},
+  {g:'K',home:'Colombia',away:'Portugal',ko:'26 Jun, 20:00'},
+  // Group L
+  {g:'L',home:'England',away:'Croatia',ko:'17 Jun, 21:00'},
+  {g:'L',home:'Ghana',away:'Panama',ko:'18 Jun, 00:00'},
+  {g:'L',home:'England',away:'Ghana',ko:'23 Jun, 21:00'},
+  {g:'L',home:'Panama',away:'Croatia',ko:'23 Jun, 00:00'},
+  {g:'L',home:'Panama',away:'England',ko:'27 Jun, 22:00'},
+  {g:'L',home:'Croatia',away:'Ghana',ko:'27 Jun, 22:00'},
+];
 
 let scores={}, koMatches={}, players={}, goalscorers={};
 let topScorers=[], topAssists=[], topYellows=[], topReds=[], teamStats=[], teamCards={};
@@ -735,7 +816,10 @@ function renderGroupStage(){
         if(isAdmin){
           html+=`<div class="match-row ${has?'has-score':''}"><div class="match-home">${m.home} ${flag(m.home)}</div><div class="score-center"><input class="score-inp" type="number" min="0" max="99" value="${sc.hs!=null?sc.hs:''}" placeholder="?" oninput="setScore('${key}','hs',this.value)"><span class="score-sep">–</span><input class="score-inp" type="number" min="0" max="99" value="${sc.as!=null?sc.as:''}" placeholder="?" oninput="setScore('${key}','as',this.value)"></div><div class="match-away">${flag(m.away)} ${m.away}</div></div>${goalscorerRow(key)}`;
         } else {
-          html+=`<div class="match-row ${has?'has-score':''}"><div class="match-home">${m.home} ${flag(m.home)}</div><div class="score-center"><span class="score-static">${has?sc.hs:'?'}</span><span class="score-sep">–</span><span class="score-static">${has?sc.as:'?'}</span></div><div class="match-away">${flag(m.away)} ${m.away}</div></div>${goalscorerRow(key)}`;
+          const scoreHtml = has
+            ? `<span class="score-static">${sc.hs}</span><span class="score-sep">–</span><span class="score-static">${sc.as}</span>`
+            : `<span style="font-size:11px;font-weight:800;color:var(--muted)">${m.ko||''}</span>`;
+          html+=`<div class="match-row ${has?'has-score':''}"><div class="match-home">${m.home} ${flag(m.home)}</div><div class="score-center">${scoreHtml}</div><div class="match-away">${flag(m.away)} ${m.away}</div></div>${goalscorerRow(key)}`;
         }
       });
       html+='</div></div>';
