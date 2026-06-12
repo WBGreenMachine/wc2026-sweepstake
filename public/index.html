@@ -807,7 +807,6 @@ function renderGroupStage(){
     });
     html+='</div>';
   } else {
-    if(!isAdmin) html+='<div class="readonly-banner">View-only — scores update live</div>';
     Object.keys(GROUPS).forEach(gid=>{
       html+=`<div class="matches-section"><div class="matches-group-title">Group ${gid}</div><div class="matches-list">`;
       allGroupMatches.filter(m=>m.g===gid).forEach(m=>{
