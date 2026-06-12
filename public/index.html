@@ -818,7 +818,7 @@ function renderGroupStage(){
         } else {
           const scoreHtml = has
             ? `<span class="score-static">${sc.hs}</span><span class="score-sep">–</span><span class="score-static">${sc.as}</span>`
-            : `<div style="text-align:center;line-height:1.3"><div style="font-size:11px;font-weight:800;color:var(--muted)">${m.ko?m.ko.split(', ')[0]:''}</div><div style="font-size:12px;font-weight:900;color:var(--text)">${m.ko?m.ko.split(', ')[1]:''}</div></div>`;
+            : `<div style="text-align:center;line-height:1.3"><div style="font-size:12px;font-weight:900;color:var(--text)">${m.ko?m.ko.split(', ')[0]:''}</div><div style="font-size:11px;font-weight:600;color:var(--text)">${m.ko?m.ko.split(', ')[1]:''}</div></div>`;
           html+=`<div class="match-row ${has?'has-score':''}"><div class="match-home">${m.home} ${flag(m.home)}</div><div class="score-center">${scoreHtml}</div><div class="match-away">${flag(m.away)} ${m.away}</div></div>${goalscorerRow(key)}`;
         }
       });
