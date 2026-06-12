@@ -79,11 +79,21 @@ async function firebaseSet(path, value, token) {
 }
 
 const NAME_MAP = {
-  "Bosnia And Herzegovina":"Bosnia-Herzegovina","Bosnia & Herzegovina":"Bosnia-Herzegovina",
-  "USA":"United States","United States of America":"United States",
-  "Cote d'Ivoire":"Ivory Coast","Congo DR":"DR Congo",
-  "Democratic Republic of Congo":"DR Congo","Korea Republic":"South Korea",
-  "Türkiye":"Turkey","Curaçao":"Curacao","Cabo Verde":"Cape Verde"
+  "Bosnia And Herzegovina": "Bosnia-Herzegovina",
+  "Bosnia & Herzegovina":   "Bosnia-Herzegovina",
+  "Bosnia and Herzegovina": "Bosnia-Herzegovina",
+  "USA":                    "United States",
+  "United States of America": "United States",
+  "Cote d'Ivoire":          "Ivory Coast",
+  "Congo DR":               "DR Congo",
+  "Democratic Republic of Congo": "DR Congo",
+  "Korea Republic":         "South Korea",
+  "Türkiye":                "Turkey",
+  "Curaçao":                "Curacao",
+  "Cabo Verde":             "Cape Verde",
+  "Czech Republic":         "Czechia",
+  "IR Iran":                "Iran",
+  "United Arab Emirates":   "UAE",
 };
 const norm = n => NAME_MAP[n] || n;
 
@@ -94,6 +104,14 @@ exports.handler = async function() {
     // ── 1. FIXTURES (scores + goalscorers) ──────────────────
     const fixRes = await apiRequest(`/fixtures?league=${WC_ID}&season=${WC_SEASON}`);
     const fixtures = fixRes.response || [];
+    console.log(`API returned ${fixtures.length} fixtures`);
+    console.log(`API errors: ${JSON.stringify(fixRes.errors)}`);
+
+    // Log first fixture to check data structure
+    if(fixtures.length > 0) {
+      const f0 = fixtures[0];
+      console.log(`Sample fixture: ${f0.teams?.home?.name} vs ${f0.teams?.away?.name} - status: ${f0.fixture?.status?.short} - score: ${f0.goals?.home}-${f0.goals?.away}`);
+    }
 
     const scores      = {};
     const goalscorers = {};
