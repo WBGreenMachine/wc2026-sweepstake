@@ -704,10 +704,14 @@ function renderBracket(){
 function renderHeroStats(){
   const played=allGroupMatches.filter(m=>{const sc=scores[m.home+'_'+m.away];return sc&&sc.hs!=null&&sc.as!=null&&!isNaN(+sc.hs)&&!isNaN(+sc.as);}).length;
   const goals=Object.values(scores).reduce((s,sc)=>{if(sc&&sc.hs!=null&&sc.as!=null){const h=+sc.hs,a=+sc.as;if(!isNaN(h)&&!isNaN(a))return s+h+a;}return s;},0);
+  const cards=Object.values(teamCards||{});
+  const yellows=cards.reduce((s,c)=>s+(c.yellows||0),0);
+  const reds=cards.reduce((s,c)=>s+(c.reds||0),0);
   document.getElementById('hero-stats').innerHTML=`
     <div class="stat-block"><div class="stat-num">${played}</div><div class="stat-label">Played</div></div>
     <div class="stat-block"><div class="stat-num">${goals}</div><div class="stat-label">Goals</div></div>
-    <div class="stat-block"><div class="stat-num">${PARTICIPANTS.length}</div><div class="stat-label">Players</div></div>`;
+    <div class="stat-block"><div class="stat-num">${yellows}</div><div class="stat-label">Yellows</div></div>
+    <div class="stat-block"><div class="stat-num">${reds}</div><div class="stat-label">Reds</div></div>`;
 }
 
 // ── SWEEPSTAKE ────────────────────────────────────────────
