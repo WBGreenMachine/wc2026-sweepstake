@@ -130,7 +130,7 @@ exports.handler = async function() {
 
       const round = f.league.round || "";
       if (round.toLowerCase().includes("group")) {
-        scores[`${home}_${away}`] = { hs: hs, as: away_score };
+        scores[`${home}_${away}`] = { hs: hs, as: away_score, live: isLive };
       }
 
       if (isDone || isLive) {
