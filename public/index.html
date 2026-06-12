@@ -656,7 +656,7 @@ function renderLeaderboard(){
   let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:14px;font-weight:700;line-height:1.8"><b>Scoring:</b> Group pts (W=3, D=1) + KO wins (R32 +${KO_PTS.r32}, R16 +${KO_PTS.r16}, QF +${KO_PTS.qf}, SF +${KO_PTS.sf}, Final +${KO_PTS.final}, Winner bonus +${KO_PTS.winner}) &nbsp;·&nbsp; Tiebreaker: goals scored</div>
   <div class="leaderboard"><div class="lb-header"><div></div><div>Player</div><div style="text-align:right">Points</div></div>`;
   ranked.forEach((p,i)=>{
-    const medal=i===0?'&#127957;':i===1?'&#129350;':i===2?'&#129349;':'';
+    const medal=i===0?'1st':i===1?'2nd':i===2?'3rd':'';
     const rc=i===0?'r1':i===1?'r2':i===2?'r3':'';
     const teams=(PRESET_TEAMS[p.name]||[]).filter(Boolean).map(t=>`${t}`).join(' · ');
     html+=`<div class="lb-row ${i<3?'rank-'+(i+1):''}">
@@ -686,7 +686,7 @@ function renderGoldenBoot(){
   }
   let html='<div style="margin-bottom:16px;font-size:12px;color:var(--muted);font-weight:700">Top scorers · live · updates every 5 mins</div><div style="background:var(--surface);border:2px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow)"><div style="display:grid;grid-template-columns:36px 1fr 40px 40px 40px;gap:6px;padding:8px 14px;background:var(--green);font-size:10px;font-weight:800;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.08em"><div></div><div>Player</div><div style="text-align:center">Goals</div><div style="text-align:center">Ast</div><div style="text-align:center">GP</div></div>';
   arr.forEach((p,i)=>{
-    const medal=i===0?'&#127957;':i===1?'&#129350;':i===2?'&#129349;':'';
+    const medal=i===0?'1st':i===1?'2nd':i===2?'3rd':'';
     const bg=i===0?'background:var(--gold-light)':i===1?'background:#f8f8f8':i===2?'background:#fff7f0':'';
     const pickers=getPickerOf(p.name);
     html+=`<div style="display:grid;grid-template-columns:36px 1fr 40px 40px 40px;gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:center;${bg}">
@@ -826,7 +826,7 @@ window.setStatsView=v=>{statsView=v;renderStats();};
 function statTable(title,emoji,rows,c1l,c1k,c2l,c2k){
   let html=`<div style="margin-bottom:20px"><div style="font-family:'Abril Fatface',serif;font-size:20px;color:var(--green);margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid var(--border)">${emoji} ${title}</div><div style="background:var(--surface);border:2px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow)"><div style="display:grid;grid-template-columns:32px 1fr 60px ${c2k?'60px':''};gap:6px;padding:7px 12px;background:var(--green);font-size:10px;font-weight:800;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.08em"><div></div><div>Team</div><div style="text-align:center">${c1l}</div>${c2k?`<div style="text-align:center">${c2l}</div>`:''}</div>`;
   rows.forEach((r,i)=>{
-    const medal=i===0?'&#127957;':i===1?'&#129350;':i===2?'&#129349;':'';
+    const medal=i===0?'1st':i===1?'2nd':i===2?'3rd':'';
     html+=`<div style="display:grid;grid-template-columns:32px 1fr 60px ${c2k?'60px':''};gap:6px;padding:9px 12px;border-bottom:1px solid var(--border);align-items:center;${i===0?'background:var(--gold-light)':''}"><div style="font-family:'Abril Fatface',serif;font-size:16px;color:var(--muted);text-align:center">${medal||i+1}</div><div style="font-weight:700;font-size:13px;display:flex;align-items:center;gap:5px">${flag(r.name)} ${r.name}</div><div style="text-align:center;font-family:'Abril Fatface',serif;font-size:18px;color:var(--green)">${r[c1k]}</div>${c2k?`<div style="text-align:center;font-size:13px;font-weight:700;color:var(--muted)">${r[c2k]}</div>`:''}</div>`;
   });
   html+='</div></div>';
@@ -836,7 +836,7 @@ function statTable(title,emoji,rows,c1l,c1k,c2l,c2k){
 function playerStatTable(title,emoji,rows,c1l,c1k,c2l,c2k){
   let html=`<div style="margin-bottom:20px"><div style="font-family:'Abril Fatface',serif;font-size:20px;color:var(--green);margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid var(--border)">${emoji} ${title}</div><div style="background:var(--surface);border:2px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow)"><div style="display:grid;grid-template-columns:32px 1fr 60px ${c2k?'60px':''};gap:6px;padding:7px 12px;background:var(--green);font-size:10px;font-weight:800;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.08em"><div></div><div>Player</div><div style="text-align:center">${c1l}</div>${c2k?`<div style="text-align:center">${c2l}</div>`:''}</div>`;
   rows.forEach((p,i)=>{
-    const medal=i===0?'&#127957;':i===1?'&#129350;':i===2?'&#129349;':'';
+    const medal=i===0?'1st':i===1?'2nd':i===2?'3rd':'';
     html+=`<div style="display:grid;grid-template-columns:32px 1fr 60px ${c2k?'60px':''};gap:6px;padding:9px 12px;border-bottom:1px solid var(--border);align-items:center;${i===0?'background:var(--gold-light)':''}"><div style="font-family:'Abril Fatface',serif;font-size:16px;color:var(--muted);text-align:center">${medal||i+1}</div><div><div style="font-weight:700;font-size:12px">${p.name}</div><div style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:3px">${flag(p.team)} ${p.team}</div></div><div style="text-align:center;font-family:'Abril Fatface',serif;font-size:18px;color:var(--green)">${p[c1k]}</div>${c2k?`<div style="text-align:center;font-size:13px;font-weight:700;color:var(--muted)">${p[c2k]}</div>`:''}</div>`;
   });
   html+='</div></div>';
