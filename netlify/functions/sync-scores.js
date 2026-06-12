@@ -106,13 +106,13 @@ exports.handler = async function() {
 
       const home = norm(f.teams.home.name);
       const away = norm(f.teams.away.name);
-      const hs   = f.goals.home;
-      const as_  = f.goals.away;
-      if (hs === null || as_ === null) continue;
+      const hs   = f.goals.home ?? 0;
+      const away_score = f.goals.away ?? 0;
+      if (f.goals.home === null || f.goals.away === null) continue;
 
       const round = f.league.round || "";
       if (round.toLowerCase().includes("group")) {
-        scores[`${home}_${away}`] = { hs, as: as_ };
+        scores[`${home}_${away}`] = { hs: hs, as: away_score };
       }
 
       if (isDone || isLive) {
