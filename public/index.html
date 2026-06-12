@@ -548,26 +548,43 @@ function goalscorerRow(key){
 
 // ── LIVE TICKER ───────────────────────────────────────────
 function updateTicker(){
-  const items=[];
+  const liveItems = [];
+  const resultItems = [];
+
   allGroupMatches.forEach(m=>{
     const sc=scores[m.home+'_'+m.away];
     if(!sc||sc.hs==null||sc.as==null) return;
     const ho=ownerOf(m.home).join(', ');
     const ao=ownerOf(m.away).join(', ');
-    items.push({home:m.home,away:m.away,hs:sc.hs,as:sc.as,ho,ao});
+    const item={home:m.home,away:m.away,hs:sc.hs,as:sc.as,ho,ao};
+    if(sc.live) liveItems.push(item);
+    else resultItems.push(item);
   });
   KO_ROUNDS.forEach(r=>{
     for(let i=0;i<r.matches;i++){
       const m=koMatches[r.id+'_'+i];
       if(!m||!m.home||!m.away||m.hs==null||m.as==null) continue;
-      items.push({home:m.home,away:m.away,hs:m.hs,as:m.as,ho:ownerOf(m.home).join(', '),ao:ownerOf(m.away).join(', '),round:r.label});
+      resultItems.push({home:m.home,away:m.away,hs:m.hs,as:m.as,ho:ownerOf(m.home).join(', '),ao:ownerOf(m.away).join(', '),round:r.label});
     }
   });
+
   const ticker=document.getElementById('live-ticker');
   const track=document.getElementById('ticker-track');
-  if(!items.length){ ticker.classList.remove('active'); return; }
+  const label=document.querySelector('.ticker-label');
+  const allItems=[...liveItems,...resultItems];
+  if(!allItems.length){ ticker.classList.remove('active'); return; }
+
+  const isLive=liveItems.length>0;
   ticker.classList.add('active');
-  const doubled=[...items,...items];
+  if(isLive){
+    ticker.style.background='#c1121f';
+    label.innerHTML='<div class="ticker-dot"></div>LIVE';
+  } else {
+    ticker.style.background='#2d6a4f';
+    label.innerHTML='RESULTS';
+  }
+
+  const doubled=[...allItems,...allItems];
   track.innerHTML=doubled.map(it=>`<div class="ticker-item">${flag(it.home)} ${it.home} <span class="ticker-score">${it.hs}–${it.as}</span> ${it.away} ${flag(it.away)}${(it.ho||it.ao)?` <span class="ticker-owners">(${it.ho||'?'} vs ${it.ao||'?'})</span>`:''}</div>`).join('');
 }
 
