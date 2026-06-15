@@ -1,24 +1,35 @@
 const https = require("https");
 
-const DB_URL       = process.env.FIREBASE_DB_URL;
-const CLIENT_EMAIL = process.env.FIREBASE_CLIENT_EMAIL;
-const PRIVATE_KEY  = (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
+// --- Config -----------------------------------------------------------------
+// DB_URL stays as its own env var (it's a plain URL, never a problem).
+const DB_URL = process.env.FIREBASE_DB_URL;
+
+// Everything else comes from ONE base64-encoded service-account JSON.
+// This avoids all newline/escaping problems with the private key.
+let CLIENT_EMAIL = "";
+let PRIVATE_KEY  = "";
+try {
+  const raw = Buffer.from(process.env.FIREBASE_SA_B64 || "", "base64").toString("utf8");
+  const sa  = JSON.parse(raw);
+  CLIENT_EMAIL = sa.client_email;
+  PRIVATE_KEY  = sa.private_key; // JSON.parse restores real newlines automatically
+} catch (e) {
+  console.error("Could not decode FIREBASE_SA_B64: " + e.message);
+}
 
 const WC_JSON_URL = "https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json";
 
+// --- Helpers ----------------------------------------------------------------
 function fetchUrl(url) {
   return new Promise((resolve, reject) => {
     https.get(url, (res) => {
       let data = "";
       res.on("data", c => data += c);
       res.on("end", () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch(e) {
-          reject(new Error("JSON parse failed: " + e.message + " | raw: " + data.slice(0, 200)));
-        }
+        try { resolve(JSON.parse(data)); }
+        catch (e) { reject(new Error("JSON parse failed: " + e.message)); }
       });
-    }).on("error", (e) => reject(new Error("HTTP error: " + e.message)));
+    }).on("error", e => reject(new Error("HTTP error: " + e.message)));
   });
 }
 
@@ -48,7 +59,7 @@ async function getAccessToken() {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        "Content-Length": body.length
+        "Content-Length": Buffer.byteLength(body)
       }
     };
     let data = "";
@@ -59,9 +70,7 @@ async function getAccessToken() {
           const parsed = JSON.parse(data);
           if (!parsed.access_token) reject(new Error("No access token: " + data));
           else resolve(parsed.access_token);
-        } catch(e) {
-          reject(new Error("Token parse failed: " + e.message));
-        }
+        } catch (e) { reject(new Error("Token parse failed: " + e.message)); }
       });
     });
     req.on("error", e => reject(new Error("Token request error: " + e.message)));
@@ -70,7 +79,7 @@ async function getAccessToken() {
   });
 }
 
-async function firebaseSet(path, value, token) {
+function firebaseSet(path, value, token) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify(value);
     const url  = new URL(`${DB_URL}/${path}.json`);
@@ -78,10 +87,7 @@ async function firebaseSet(path, value, token) {
       hostname: url.hostname,
       path: url.pathname + `?access_token=${token}`,
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        "Content-Length": Buffer.byteLength(body)
-      }
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) }
     };
     let data = "";
     const req = https.request(options, res => {
@@ -109,8 +115,13 @@ const NAME_MAP = {
 };
 const norm = n => NAME_MAP[n] || n;
 
-exports.handler = async function() {
+// --- Handler ----------------------------------------------------------------
+exports.handler = async function () {
   console.log("Function started");
+  if (!CLIENT_EMAIL || !PRIVATE_KEY) {
+    console.error("Missing service account. Is FIREBASE_SA_B64 set correctly?");
+    return { statusCode: 500, body: "Missing service account" };
+  }
   try {
     console.log("Fetching WC JSON...");
     const data = await fetchUrl(WC_JSON_URL);
@@ -119,21 +130,18 @@ exports.handler = async function() {
 
     console.log("Getting Firebase token...");
     const token = await getAccessToken();
-    console.log("Got token");
+    console.log("Got token OK");
 
     const scores = {};
     const goalscorers = {};
     let scored = 0;
 
     for (const m of matches) {
-      if (!m.group) continue; // skip knockout rounds
+      if (!m.group) continue;                 // group stage only
+      if (!m.score || !m.score.ft) continue;  // skip unplayed
       const home = norm(m.team1);
       const away = norm(m.team2);
-      if (!m.score || !m.score.ft) continue;
-
-      const hs  = m.score.ft[0];
-      const as_ = m.score.ft[1];
-      scores[`${home}_${away}`] = { hs, as: as_, live: false };
+      scores[`${home}_${away}`] = { hs: m.score.ft[0], as: m.score.ft[1], live: false };
       scored++;
 
       const homeGoals = (m.goals1 || []).map(g => `${g.name} ${g.minute}'`);
@@ -144,15 +152,12 @@ exports.handler = async function() {
     }
 
     console.log("Scored matches found: " + scored);
-    console.log("Writing scores to Firebase...");
     await firebaseSet("scores", scores, token);
-    console.log("Writing goalscorers to Firebase...");
     await firebaseSet("goalscorers", goalscorers, token);
     console.log("Sync complete - wrote " + scored + " scores");
 
     return { statusCode: 200, body: JSON.stringify({ ok: true, scored }) };
-
-  } catch(err) {
+  } catch (err) {
     console.error("ERROR: " + err.message);
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
