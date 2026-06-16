@@ -117,6 +117,12 @@ const norm = n => NAME_MAP[n] || n;
 
 // --- Handler ----------------------------------------------------------------
 exports.handler = async function () {
+  console.log("=== VERSION: SA_B64-diagnostic-1 ===");
+  console.log("SA_B64 present: " + !!process.env.FIREBASE_SA_B64 + " | length: " + (process.env.FIREBASE_SA_B64 || "").length);
+  console.log("Old FIREBASE_PRIVATE_KEY still present: " + !!process.env.FIREBASE_PRIVATE_KEY);
+  console.log("Email being used: " + CLIENT_EMAIL);
+  console.log("Key first line: " + (PRIVATE_KEY ? PRIVATE_KEY.split("\n")[0] : "(none)"));
+  console.log("Key line count: " + (PRIVATE_KEY ? PRIVATE_KEY.split("\n").length : 0));
   console.log("Function started");
   if (!CLIENT_EMAIL || !PRIVATE_KEY) {
     console.error("Missing service account. Is FIREBASE_SA_B64 set correctly?");
