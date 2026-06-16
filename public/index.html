@@ -178,7 +178,7 @@ body{background:var(--bg);color:var(--text);font-family:'Nunito',sans-serif;font
 .ticker-label{background:#8b0000;padding:8px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;white-space:nowrap;display:flex;align-items:center;gap:6px;flex-shrink:0}
 .ticker-dot{width:8px;height:8px;border-radius:50%;background:#ff6b6b;animation:pulse 1s infinite;flex-shrink:0}
 .ticker-scroll{overflow:hidden;flex:1;padding:8px 0}
-.ticker-track{display:inline-flex;animation:ticker-move 35s linear infinite;white-space:nowrap}
+.ticker-track{display:inline-flex;animation:ticker-move 55s linear infinite;white-space:nowrap}
 .ticker-track:hover{animation-play-state:paused}
 @keyframes ticker-move{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 .ticker-item{display:inline-flex;align-items:center;gap:8px;padding:0 28px;font-size:13px;font-weight:700;white-space:nowrap;border-right:1px solid rgba(255,255,255,.2)}
@@ -372,87 +372,87 @@ const ADMIN_PASSWORD = "greenMachines26";
 // Hardcoded group matches with BST kickoff times
 const allGroupMatches = [
   // Group A
-  {g:'A',home:'Mexico',away:'South Africa',ko:'11 Jun, 21:00'},
+  {g:'A',home:'Mexico',away:'South Africa',ko:'11 Jun, 20:00'},
   {g:'A',home:'South Korea',away:'Czechia',ko:'12 Jun, 03:00'},
-  {g:'A',home:'Mexico',away:'South Korea',ko:'16 Jun, 03:00'},
-  {g:'A',home:'Czechia',away:'South Africa',ko:'16 Jun, 18:00'},
-  {g:'A',home:'Czechia',away:'Mexico',ko:'20 Jun, 21:00'},
-  {g:'A',home:'South Africa',away:'South Korea',ko:'20 Jun, 21:00'},
+  {g:'A',home:'Czechia',away:'South Africa',ko:'18 Jun, 17:00'},
+  {g:'A',home:'Mexico',away:'South Korea',ko:'19 Jun, 02:00'},
+  {g:'A',home:'Czechia',away:'Mexico',ko:'25 Jun, 02:00'},
+  {g:'A',home:'South Africa',away:'South Korea',ko:'25 Jun, 02:00'},
   // Group B
   {g:'B',home:'Canada',away:'Bosnia-Herzegovina',ko:'12 Jun, 20:00'},
-  {g:'B',home:'Qatar',away:'Switzerland',ko:'12 Jun, 23:00'},
-  {g:'B',home:'Switzerland',away:'Bosnia-Herzegovina',ko:'17 Jun, 20:00'},
-  {g:'B',home:'Canada',away:'Qatar',ko:'17 Jun, 23:00'},
-  {g:'B',home:'Bosnia-Herzegovina',away:'Qatar',ko:'21 Jun, 20:00'},
-  {g:'B',home:'Switzerland',away:'Canada',ko:'21 Jun, 20:00'},
+  {g:'B',home:'Qatar',away:'Switzerland',ko:'13 Jun, 20:00'},
+  {g:'B',home:'Switzerland',away:'Bosnia-Herzegovina',ko:'18 Jun, 20:00'},
+  {g:'B',home:'Canada',away:'Qatar',ko:'18 Jun, 23:00'},
+  {g:'B',home:'Switzerland',away:'Canada',ko:'24 Jun, 20:00'},
+  {g:'B',home:'Bosnia-Herzegovina',away:'Qatar',ko:'24 Jun, 20:00'},
   // Group C
-  {g:'C',home:'Brazil',away:'Haiti',ko:'13 Jun, 00:00'},
-  {g:'C',home:'Morocco',away:'Scotland',ko:'13 Jun, 03:00'},
-  {g:'C',home:'Brazil',away:'Morocco',ko:'17 Jun, 03:00'},
-  {g:'C',home:'Scotland',away:'Haiti',ko:'17 Jun, 00:00'},
-  {g:'C',home:'Haiti',away:'Morocco',ko:'21 Jun, 23:00'},
-  {g:'C',home:'Scotland',away:'Brazil',ko:'21 Jun, 23:00'},
+  {g:'C',home:'Brazil',away:'Morocco',ko:'13 Jun, 23:00'},
+  {g:'C',home:'Haiti',away:'Scotland',ko:'14 Jun, 02:00'},
+  {g:'C',home:'Scotland',away:'Morocco',ko:'19 Jun, 23:00'},
+  {g:'C',home:'Brazil',away:'Haiti',ko:'20 Jun, 01:30'},
+  {g:'C',home:'Scotland',away:'Brazil',ko:'24 Jun, 23:00'},
+  {g:'C',home:'Morocco',away:'Haiti',ko:'24 Jun, 23:00'},
   // Group D
-  {g:'D',home:'United States',away:'Turkey',ko:'13 Jun, 20:00'},
-  {g:'D',home:'Paraguay',away:'Australia',ko:'13 Jun, 23:00'},
-  {g:'D',home:'United States',away:'Paraguay',ko:'18 Jun, 20:00'},
-  {g:'D',home:'Turkey',away:'Australia',ko:'18 Jun, 23:00'},
-  {g:'D',home:'Australia',away:'United States',ko:'22 Jun, 20:00'},
-  {g:'D',home:'Turkey',away:'Paraguay',ko:'22 Jun, 20:00'},
+  {g:'D',home:'United States',away:'Paraguay',ko:'13 Jun, 02:00'},
+  {g:'D',home:'Australia',away:'Turkey',ko:'14 Jun, 05:00'},
+  {g:'D',home:'United States',away:'Australia',ko:'19 Jun, 20:00'},
+  {g:'D',home:'Turkey',away:'Paraguay',ko:'20 Jun, 04:00'},
+  {g:'D',home:'Turkey',away:'United States',ko:'26 Jun, 03:00'},
+  {g:'D',home:'Paraguay',away:'Australia',ko:'26 Jun, 03:00'},
   // Group E
-  {g:'E',home:'Germany',away:'Ivory Coast',ko:'14 Jun, 20:00'},
-  {g:'E',home:'Ecuador',away:'Curacao',ko:'14 Jun, 23:00'},
-  {g:'E',home:'Germany',away:'Ecuador',ko:'18 Jun, 03:00'},
-  {g:'E',home:'Ivory Coast',away:'Curacao',ko:'18 Jun, 00:00'},
-  {g:'E',home:'Curacao',away:'Germany',ko:'22 Jun, 23:00'},
-  {g:'E',home:'Ivory Coast',away:'Ecuador',ko:'22 Jun, 23:00'},
+  {g:'E',home:'Germany',away:'Curacao',ko:'14 Jun, 18:00'},
+  {g:'E',home:'Ivory Coast',away:'Ecuador',ko:'15 Jun, 00:00'},
+  {g:'E',home:'Germany',away:'Ivory Coast',ko:'20 Jun, 21:00'},
+  {g:'E',home:'Ecuador',away:'Curacao',ko:'21 Jun, 01:00'},
+  {g:'E',home:'Curacao',away:'Ivory Coast',ko:'25 Jun, 21:00'},
+  {g:'E',home:'Ecuador',away:'Germany',ko:'25 Jun, 21:00'},
   // Group F
-  {g:'F',home:'Netherlands',away:'Sweden',ko:'14 Jun, 23:00'},
-  {g:'F',home:'Japan',away:'Tunisia',ko:'15 Jun, 02:00'},
-  {g:'F',home:'Netherlands',away:'Japan',ko:'19 Jun, 20:00'},
-  {g:'F',home:'Sweden',away:'Tunisia',ko:'19 Jun, 23:00'},
-  {g:'F',home:'Tunisia',away:'Netherlands',ko:'23 Jun, 20:00'},
-  {g:'F',home:'Sweden',away:'Japan',ko:'23 Jun, 20:00'},
+  {g:'F',home:'Netherlands',away:'Japan',ko:'14 Jun, 21:00'},
+  {g:'F',home:'Sweden',away:'Tunisia',ko:'15 Jun, 03:00'},
+  {g:'F',home:'Netherlands',away:'Sweden',ko:'20 Jun, 18:00'},
+  {g:'F',home:'Tunisia',away:'Japan',ko:'21 Jun, 05:00'},
+  {g:'F',home:'Japan',away:'Sweden',ko:'26 Jun, 00:00'},
+  {g:'F',home:'Tunisia',away:'Netherlands',ko:'26 Jun, 00:00'},
   // Group G
   {g:'G',home:'Belgium',away:'Egypt',ko:'15 Jun, 20:00'},
-  {g:'G',home:'Iran',away:'New Zealand',ko:'15 Jun, 23:00'},
-  {g:'G',home:'Belgium',away:'Iran',ko:'19 Jun, 03:00'},
-  {g:'G',home:'Egypt',away:'New Zealand',ko:'19 Jun, 00:00'},
-  {g:'G',home:'New Zealand',away:'Belgium',ko:'23 Jun, 23:00'},
-  {g:'G',home:'Egypt',away:'Iran',ko:'23 Jun, 23:00'},
+  {g:'G',home:'Iran',away:'New Zealand',ko:'16 Jun, 02:00'},
+  {g:'G',home:'Belgium',away:'Iran',ko:'21 Jun, 20:00'},
+  {g:'G',home:'New Zealand',away:'Egypt',ko:'22 Jun, 02:00'},
+  {g:'G',home:'Egypt',away:'Iran',ko:'27 Jun, 04:00'},
+  {g:'G',home:'New Zealand',away:'Belgium',ko:'27 Jun, 04:00'},
   // Group H
-  {g:'H',home:'Spain',away:'Uruguay',ko:'15 Jun, 02:00'},
-  {g:'H',home:'Cape Verde',away:'Saudi Arabia',ko:'16 Jun, 00:00'},
-  {g:'H',home:'Spain',away:'Cape Verde',ko:'20 Jun, 00:00'},
-  {g:'H',home:'Uruguay',away:'Saudi Arabia',ko:'20 Jun, 03:00'},
-  {g:'H',home:'Saudi Arabia',away:'Spain',ko:'24 Jun, 20:00'},
-  {g:'H',home:'Uruguay',away:'Cape Verde',ko:'24 Jun, 20:00'},
+  {g:'H',home:'Spain',away:'Cape Verde',ko:'15 Jun, 17:00'},
+  {g:'H',home:'Saudi Arabia',away:'Uruguay',ko:'15 Jun, 23:00'},
+  {g:'H',home:'Spain',away:'Saudi Arabia',ko:'21 Jun, 17:00'},
+  {g:'H',home:'Uruguay',away:'Cape Verde',ko:'21 Jun, 23:00'},
+  {g:'H',home:'Cape Verde',away:'Saudi Arabia',ko:'27 Jun, 01:00'},
+  {g:'H',home:'Uruguay',away:'Spain',ko:'27 Jun, 01:00'},
   // Group I
-  {g:'I',home:'France',away:'Iraq',ko:'16 Jun, 20:00'},
-  {g:'I',home:'Senegal',away:'Norway',ko:'16 Jun, 23:00'},
-  {g:'I',home:'France',away:'Senegal',ko:'20 Jun, 20:00'},
-  {g:'I',home:'Norway',away:'Iraq',ko:'20 Jun, 23:00'},
-  {g:'I',home:'Iraq',away:'Senegal',ko:'24 Jun, 23:00'},
-  {g:'I',home:'Norway',away:'France',ko:'24 Jun, 23:00'},
+  {g:'I',home:'France',away:'Senegal',ko:'16 Jun, 20:00'},
+  {g:'I',home:'Iraq',away:'Norway',ko:'16 Jun, 23:00'},
+  {g:'I',home:'France',away:'Iraq',ko:'22 Jun, 22:00'},
+  {g:'I',home:'Norway',away:'Senegal',ko:'23 Jun, 01:00'},
+  {g:'I',home:'Norway',away:'France',ko:'26 Jun, 20:00'},
+  {g:'I',home:'Senegal',away:'Iraq',ko:'26 Jun, 20:00'},
   // Group J
-  {g:'J',home:'Argentina',away:'Algeria',ko:'17 Jun, 00:00'},
-  {g:'J',home:'Jordan',away:'Austria',ko:'17 Jun, 03:00'},
-  {g:'J',home:'Argentina',away:'Jordan',ko:'21 Jun, 00:00'},
-  {g:'J',home:'Austria',away:'Algeria',ko:'21 Jun, 03:00'},
-  {g:'J',home:'Algeria',away:'Jordan',ko:'25 Jun, 20:00'},
-  {g:'J',home:'Austria',away:'Argentina',ko:'25 Jun, 20:00'},
+  {g:'J',home:'Argentina',away:'Algeria',ko:'17 Jun, 02:00'},
+  {g:'J',home:'Austria',away:'Jordan',ko:'17 Jun, 05:00'},
+  {g:'J',home:'Argentina',away:'Austria',ko:'22 Jun, 18:00'},
+  {g:'J',home:'Jordan',away:'Algeria',ko:'23 Jun, 04:00'},
+  {g:'J',home:'Algeria',away:'Austria',ko:'28 Jun, 03:00'},
+  {g:'J',home:'Jordan',away:'Argentina',ko:'28 Jun, 03:00'},
   // Group K
-  {g:'K',home:'Portugal',away:'Uzbekistan',ko:'17 Jun, 23:00'},
-  {g:'K',home:'DR Congo',away:'Colombia',ko:'18 Jun, 02:00'},
-  {g:'K',home:'Portugal',away:'DR Congo',ko:'22 Jun, 00:00'},
-  {g:'K',home:'Colombia',away:'Uzbekistan',ko:'22 Jun, 03:00'},
-  {g:'K',home:'Uzbekistan',away:'DR Congo',ko:'26 Jun, 20:00'},
-  {g:'K',home:'Colombia',away:'Portugal',ko:'26 Jun, 20:00'},
+  {g:'K',home:'Portugal',away:'DR Congo',ko:'17 Jun, 18:00'},
+  {g:'K',home:'Uzbekistan',away:'Colombia',ko:'18 Jun, 03:00'},
+  {g:'K',home:'Portugal',away:'Uzbekistan',ko:'23 Jun, 18:00'},
+  {g:'K',home:'Colombia',away:'DR Congo',ko:'24 Jun, 03:00'},
+  {g:'K',home:'Colombia',away:'Portugal',ko:'28 Jun, 00:30'},
+  {g:'K',home:'DR Congo',away:'Uzbekistan',ko:'28 Jun, 00:30'},
   // Group L
   {g:'L',home:'England',away:'Croatia',ko:'17 Jun, 21:00'},
   {g:'L',home:'Ghana',away:'Panama',ko:'18 Jun, 00:00'},
   {g:'L',home:'England',away:'Ghana',ko:'23 Jun, 21:00'},
-  {g:'L',home:'Panama',away:'Croatia',ko:'23 Jun, 00:00'},
+  {g:'L',home:'Panama',away:'Croatia',ko:'24 Jun, 00:00'},
   {g:'L',home:'Panama',away:'England',ko:'27 Jun, 22:00'},
   {g:'L',home:'Croatia',away:'Ghana',ko:'27 Jun, 22:00'},
 ];
@@ -700,18 +700,64 @@ function renderBracket(){
   return html;
 }
 
+// ── DERIVED DATA (client-side, from scores + goalscorers) ──
+function stripMinute(s){ return (s||'').replace(/\s+\d+(\+\d+)?'?\s*$/,'').trim(); }
+
+// Aggregate top scorers from the goalscorers node the function writes.
+// Note: own goals can't be distinguished here (the feed strips that flag),
+// so they're counted toward the listed scorer — rare edge case for a sweepstake.
+function computeScorers(){
+  const tally={};
+  Object.entries(goalscorers||{}).forEach(([key,gs])=>{
+    const us=key.indexOf('_'); if(us<0) return;
+    const home=key.slice(0,us), away=key.slice(us+1);
+    const add=(list,team)=>{(list||[]).forEach(e=>{
+      const name=stripMinute(e); if(!name) return;
+      if(!tally[name]) tally[name]={name,team,goals:0};
+      tally[name].goals++;
+    });};
+    add(gs.home,home); add(gs.away,away);
+  });
+  return Object.values(tally).sort((a,b)=>b.goals-a.goals||a.name.localeCompare(b.name));
+}
+
+// Derive per-team played / goals for / goals against from scores.
+function computeTeamStats(){
+  const t={};
+  const ensure=n=>{ if(!t[n]) t[n]={name:n,played:0,goalsFor:0,goalsAgainst:0}; return t[n]; };
+  Object.entries(scores||{}).forEach(([key,sc])=>{
+    if(!sc||sc.hs==null||sc.as==null) return;
+    const hs=+sc.hs, as=+sc.as; if(isNaN(hs)||isNaN(as)) return;
+    const us=key.indexOf('_'); if(us<0) return;
+    const home=key.slice(0,us), away=key.slice(us+1);
+    const h=ensure(home), a=ensure(away);
+    h.played++; a.played++;
+    h.goalsFor+=hs; h.goalsAgainst+=as;
+    a.goalsFor+=as; a.goalsAgainst+=hs;
+  });
+  return Object.values(t);
+}
+
 // ── HERO STATS ────────────────────────────────────────────
 function renderHeroStats(){
   const played=allGroupMatches.filter(m=>{const sc=scores[m.home+'_'+m.away];return sc&&sc.hs!=null&&sc.as!=null&&!isNaN(+sc.hs)&&!isNaN(+sc.as);}).length;
   const goals=Object.values(scores).reduce((s,sc)=>{if(sc&&sc.hs!=null&&sc.as!=null){const h=+sc.hs,a=+sc.as;if(!isNaN(h)&&!isNaN(a))return s+h+a;}return s;},0);
-  const cards=Object.values(teamCards||{});
-  const yellows=cards.reduce((s,c)=>s+(c.yellows||0),0);
-  const reds=cards.reduce((s,c)=>s+(c.reds||0),0);
+
+  // Teams Left = 48 minus teams eliminated (3rd/4th in a completed group)
+  let out=0;
+  Object.keys(GROUPS).forEach(gid=>{ if(groupComplete(gid)){ const st=getStandings(gid); st.forEach((t,i)=>{ if(i>=2) out++; }); } });
+  const teamsLeft=48-out;
+
+  const scorers=computeScorers();
+  const top=scorers[0];
+  const topStr=top?`${top.name.split(' ').pop()}`:'—';
+  const topNum=top?top.goals:'';
+
   document.getElementById('hero-stats').innerHTML=`
     <div class="stat-block"><div class="stat-num">${played}</div><div class="stat-label">Played</div></div>
     <div class="stat-block"><div class="stat-num">${goals}</div><div class="stat-label">Goals</div></div>
-    <div class="stat-block"><div class="stat-num">${yellows}</div><div class="stat-label">Yellows</div></div>
-    <div class="stat-block"><div class="stat-num">${reds}</div><div class="stat-label">Reds</div></div>`;
+    <div class="stat-block"><div class="stat-num">${teamsLeft}</div><div class="stat-label">Teams Left</div></div>
+    <div class="stat-block"><div class="stat-num" style="font-size:15px;padding:6px 0 4px">${topStr}${topNum!==''?` <span style="font-size:11px;color:rgba(255,255,255,.6)">(${topNum})</span>`:''}</div><div class="stat-label">Top Scorer</div></div>`;
 }
 
 // ── SWEEPSTAKE ────────────────────────────────────────────
@@ -764,25 +810,23 @@ function getPickerOf(playerName){
 
 function renderGoldenBoot(){
   const el=document.getElementById('panel-golden-boot');
-  const arr=Array.isArray(topScorers)?topScorers:Object.values(topScorers);
+  const arr=computeScorers();
   if(!arr.length){
-    el.innerHTML='<div class="empty"><div class="empty-icon">&#128095;</div>No data yet — updates once matches are played.</div>';
+    el.innerHTML='<div class="empty"><div class="empty-icon">&#128095;</div>No data yet — updates once goals are scored.</div>';
     return;
   }
-  let html='<div style="margin-bottom:16px;font-size:12px;color:var(--muted);font-weight:700">Top scorers · live · updates every 5 mins</div><div style="background:var(--surface);border:2px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow)"><div style="display:grid;grid-template-columns:36px 1fr 40px 40px 40px;gap:6px;padding:8px 14px;background:var(--green);font-size:10px;font-weight:800;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.08em"><div></div><div>Player</div><div style="text-align:center">Goals</div><div style="text-align:center">Ast</div><div style="text-align:center">GP</div></div>';
+  let html='<div style="margin-bottom:16px;font-size:12px;color:var(--muted);font-weight:700">Top scorers · live · updates every 5 mins</div><div style="background:var(--surface);border:2px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow)"><div style="display:grid;grid-template-columns:36px 1fr 50px;gap:6px;padding:8px 14px;background:var(--green);font-size:10px;font-weight:800;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.08em"><div></div><div>Player</div><div style="text-align:center">Goals</div></div>';
   arr.forEach((p,i)=>{
     const medal=i===0?'1st':i===1?'2nd':i===2?'3rd':'';
     const bg=i===0?'background:var(--gold-light)':i===1?'background:#f8f8f8':i===2?'background:#fff7f0':'';
     const pickers=getPickerOf(p.name);
-    html+=`<div style="display:grid;grid-template-columns:36px 1fr 40px 40px 40px;gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:center;${bg}">
+    html+=`<div style="display:grid;grid-template-columns:36px 1fr 50px;gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:center;${bg}">
       <div style="font-family:'Abril Fatface',serif;font-size:18px;color:var(--muted);text-align:center">${medal||i+1}</div>
       <div><div style="font-weight:800;font-size:13px">${p.name}</div><div style="font-size:11px;color:var(--muted);margin-top:1px;display:flex;align-items:center;gap:4px">${flag(p.team)} ${p.team}</div>${pickers.length?`<div style="font-size:10px;color:var(--green);font-weight:800;margin-top:2px">Picked by: ${pickers.join(', ')}</div>`:''}</div>
       <div style="text-align:center;font-family:'Abril Fatface',serif;font-size:20px;color:var(--green)">${p.goals}</div>
-      <div style="text-align:center;font-size:13px;font-weight:700;color:var(--muted)">${p.assists||0}</div>
-      <div style="text-align:center;font-size:11px;color:var(--muted)">${p.games||0}</div>
     </div>`;
   });
-  html+='</div><div style="font-size:10px;color:var(--muted);margin-top:8px;text-align:center">Goals · Assists · Games Played</div>';
+  html+='</div>';
   el.innerHTML=html;
 }
 
@@ -934,31 +978,21 @@ function renderStats(){
   const el=document.getElementById('panel-stats');
   let html=`<div class="toggle-bar"><button class="toggle-btn ${statsView==='teams'?'active':''}" onclick="setStatsView('teams')">Teams</button><button class="toggle-btn ${statsView==='players'?'active':''}" onclick="setStatsView('players')">Players</button></div>`;
   if(statsView==='teams'){
-    const ts=Array.isArray(teamStats)?teamStats:Object.values(teamStats);
-    if(!ts.length&&!Object.keys(teamCards).length){
+    const ts=computeTeamStats();
+    if(!ts.length){
       html+='<div class="empty"><div class="empty-icon">&#128202;</div>No data yet.</div>';
     } else {
       const byGF=[...ts].sort((a,b)=>b.goalsFor-a.goalsFor).slice(0,5);
       const byGA=[...ts].filter(t=>t.played>0).sort((a,b)=>a.goalsAgainst-b.goalsAgainst).slice(0,5);
-      const wc=Object.entries(teamCards).map(([name,c])=>({name,...c}));
       html+=statTable('Most Goals Scored','&#9917;',byGF,'Goals','goalsFor','Played','played');
       html+=statTable('Best Defence','&#128737;',byGA,'Conceded','goalsAgainst','Played','played');
-      html+=statTable('Most Yellow Cards','&#129000;',wc.sort((a,b)=>b.yellows-a.yellows).slice(0,5),'Yellows','yellows','Reds','reds');
-      if(wc.some(r=>r.reds>0)) html+=statTable('Most Red Cards','&#128997;',wc.sort((a,b)=>b.reds-a.reds).slice(0,5),'Reds','reds','Yellows','yellows');
     }
   } else {
-    const ts=Array.isArray(topScorers)?topScorers:Object.values(topScorers);
-    const ta=Array.isArray(topAssists)?topAssists:Object.values(topAssists);
-    const ty=Array.isArray(topYellows)?topYellows:Object.values(topYellows);
-    const tr=Array.isArray(topReds)?topReds:Object.values(topReds);
-    if(!ta.length&&!ty.length){
+    const sc=computeScorers();
+    if(!sc.length){
       html+='<div class="empty"><div class="empty-icon">&#128100;</div>No data yet.</div>';
     } else {
-      html+=playerStatTable('Top Assists','&#127919;',ta.slice(0,5),'Assists','assists','Games','games');
-      html+=playerStatTable('Most Shots','&#127919;',[...ts].sort((a,b)=>b.shots-a.shots).slice(0,5),'Shots','shots','Goals','goals');
-      html+=playerStatTable('Most Dribbles','&#127939;',[...ts].sort((a,b)=>b.dribbles-a.dribbles).slice(0,5),'Dribbles','dribbles','Goals','goals');
-      html+=playerStatTable('Most Yellow Cards','&#129000;',ty.slice(0,5),'Yellows','yellows','Reds','reds');
-      if(tr.some(p=>p.reds>0)) html+=playerStatTable('Most Red Cards','&#128997;',tr.filter(p=>p.reds>0).slice(0,5),'Reds','reds','Yellows','yellows');
+      html+=playerStatTable('Top Scorers','&#9917;',sc.slice(0,10),'Goals','goals','',null);
     }
   }
   el.innerHTML=html;
