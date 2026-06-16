@@ -738,6 +738,18 @@ function computeTeamStats(){
   return Object.values(t);
 }
 
+// Joint ranking for a pre-sorted list: ties share a position, next slot skips
+// (e.g. 1, 2, 2, 4). valOf returns the value rows are ranked on.
+function computeRanks(rows, valOf){
+  const ranks=[];
+  rows.forEach((r,i)=>{
+    if(i>0 && valOf(rows[i])===valOf(rows[i-1])) ranks.push(ranks[i-1]);
+    else ranks.push(i+1);
+  });
+  return ranks;
+}
+function ordinal(n){ return n===1?'1st':n===2?'2nd':n===3?'3rd':String(n); }
+
 // ── HERO STATS ────────────────────────────────────────────
 function renderHeroStats(){
   const played=allGroupMatches.filter(m=>{const sc=scores[m.home+'_'+m.away];return sc&&sc.hs!=null&&sc.as!=null&&!isNaN(+sc.hs)&&!isNaN(+sc.as);}).length;
@@ -816,12 +828,14 @@ function renderGoldenBoot(){
     return;
   }
   let html='<div style="margin-bottom:16px;font-size:12px;color:var(--muted);font-weight:700">Top scorers · live · updates every 5 mins</div><div style="background:var(--surface);border:2px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow)"><div style="display:grid;grid-template-columns:36px 1fr 50px;gap:6px;padding:8px 14px;background:var(--green);font-size:10px;font-weight:800;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.08em"><div></div><div>Player</div><div style="text-align:center">Goals</div></div>';
+  const ranks=computeRanks(arr,r=>r.goals);
   arr.forEach((p,i)=>{
-    const medal=i===0?'1st':i===1?'2nd':i===2?'3rd':'';
-    const bg=i===0?'background:var(--gold-light)':i===1?'background:#f8f8f8':i===2?'background:#fff7f0':'';
+    const rank=ranks[i];
+    const medal=rank<=3?ordinal(rank):'';
+    const bg=rank===1?'background:var(--gold-light)':rank===2?'background:#f8f8f8':rank===3?'background:#fff7f0':'';
     const pickers=getPickerOf(p.name);
     html+=`<div style="display:grid;grid-template-columns:36px 1fr 50px;gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:center;${bg}">
-      <div style="font-family:'Abril Fatface',serif;font-size:18px;color:var(--muted);text-align:center">${medal||i+1}</div>
+      <div style="font-family:'Abril Fatface',serif;font-size:18px;color:var(--muted);text-align:center">${medal||rank}</div>
       <div><div style="font-weight:800;font-size:13px">${p.name}</div><div style="font-size:11px;color:var(--muted);margin-top:1px;display:flex;align-items:center;gap:4px">${flag(p.team)} ${p.team}</div>${pickers.length?`<div style="font-size:10px;color:var(--green);font-weight:800;margin-top:2px">Picked by: ${pickers.join(', ')}</div>`:''}</div>
       <div style="text-align:center;font-family:'Abril Fatface',serif;font-size:20px;color:var(--green)">${p.goals}</div>
     </div>`;
@@ -956,9 +970,11 @@ window.setStatsView=v=>{statsView=v;renderStats();};
 
 function statTable(title,emoji,rows,c1l,c1k,c2l,c2k){
   let html=`<div style="margin-bottom:20px"><div style="font-family:'Abril Fatface',serif;font-size:20px;color:var(--green);margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid var(--border)">${emoji} ${title}</div><div style="background:var(--surface);border:2px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow)"><div style="display:grid;grid-template-columns:32px 1fr 60px ${c2k?'60px':''};gap:6px;padding:7px 12px;background:var(--green);font-size:10px;font-weight:800;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.08em"><div></div><div>Team</div><div style="text-align:center">${c1l}</div>${c2k?`<div style="text-align:center">${c2l}</div>`:''}</div>`;
+  const ranks=computeRanks(rows,r=>r[c1k]);
   rows.forEach((r,i)=>{
-    const medal=i===0?'1st':i===1?'2nd':i===2?'3rd':'';
-    html+=`<div style="display:grid;grid-template-columns:32px 1fr 60px ${c2k?'60px':''};gap:6px;padding:9px 12px;border-bottom:1px solid var(--border);align-items:center;${i===0?'background:var(--gold-light)':''}"><div style="font-family:'Abril Fatface',serif;font-size:16px;color:var(--muted);text-align:center">${medal||i+1}</div><div style="font-weight:700;font-size:13px;display:flex;align-items:center;gap:5px">${flag(r.name)} ${r.name}</div><div style="text-align:center;font-family:'Abril Fatface',serif;font-size:18px;color:var(--green)">${r[c1k]}</div>${c2k?`<div style="text-align:center;font-size:13px;font-weight:700;color:var(--muted)">${r[c2k]}</div>`:''}</div>`;
+    const rank=ranks[i];
+    const medal=rank<=3?ordinal(rank):'';
+    html+=`<div style="display:grid;grid-template-columns:32px 1fr 60px ${c2k?'60px':''};gap:6px;padding:9px 12px;border-bottom:1px solid var(--border);align-items:center;${rank===1?'background:var(--gold-light)':''}"><div style="font-family:'Abril Fatface',serif;font-size:16px;color:var(--muted);text-align:center">${medal||rank}</div><div style="font-weight:700;font-size:13px;display:flex;align-items:center;gap:5px">${flag(r.name)} ${r.name}</div><div style="text-align:center;font-family:'Abril Fatface',serif;font-size:18px;color:var(--green)">${r[c1k]}</div>${c2k?`<div style="text-align:center;font-size:13px;font-weight:700;color:var(--muted)">${r[c2k]}</div>`:''}</div>`;
   });
   html+='</div></div>';
   return html;
@@ -966,9 +982,11 @@ function statTable(title,emoji,rows,c1l,c1k,c2l,c2k){
 
 function playerStatTable(title,emoji,rows,c1l,c1k,c2l,c2k){
   let html=`<div style="margin-bottom:20px"><div style="font-family:'Abril Fatface',serif;font-size:20px;color:var(--green);margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid var(--border)">${emoji} ${title}</div><div style="background:var(--surface);border:2px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow)"><div style="display:grid;grid-template-columns:32px 1fr 60px ${c2k?'60px':''};gap:6px;padding:7px 12px;background:var(--green);font-size:10px;font-weight:800;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.08em"><div></div><div>Player</div><div style="text-align:center">${c1l}</div>${c2k?`<div style="text-align:center">${c2l}</div>`:''}</div>`;
+  const ranks=computeRanks(rows,r=>r[c1k]);
   rows.forEach((p,i)=>{
-    const medal=i===0?'1st':i===1?'2nd':i===2?'3rd':'';
-    html+=`<div style="display:grid;grid-template-columns:32px 1fr 60px ${c2k?'60px':''};gap:6px;padding:9px 12px;border-bottom:1px solid var(--border);align-items:center;${i===0?'background:var(--gold-light)':''}"><div style="font-family:'Abril Fatface',serif;font-size:16px;color:var(--muted);text-align:center">${medal||i+1}</div><div><div style="font-weight:700;font-size:12px">${p.name}</div><div style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:3px">${flag(p.team)} ${p.team}</div></div><div style="text-align:center;font-family:'Abril Fatface',serif;font-size:18px;color:var(--green)">${p[c1k]}</div>${c2k?`<div style="text-align:center;font-size:13px;font-weight:700;color:var(--muted)">${p[c2k]}</div>`:''}</div>`;
+    const rank=ranks[i];
+    const medal=rank<=3?ordinal(rank):'';
+    html+=`<div style="display:grid;grid-template-columns:32px 1fr 60px ${c2k?'60px':''};gap:6px;padding:9px 12px;border-bottom:1px solid var(--border);align-items:center;${rank===1?'background:var(--gold-light)':''}"><div style="font-family:'Abril Fatface',serif;font-size:16px;color:var(--muted);text-align:center">${medal||rank}</div><div><div style="font-weight:700;font-size:12px">${p.name}</div><div style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:3px">${flag(p.team)} ${p.team}</div></div><div style="text-align:center;font-family:'Abril Fatface',serif;font-size:18px;color:var(--green)">${p[c1k]}</div>${c2k?`<div style="text-align:center;font-size:13px;font-weight:700;color:var(--muted)">${p[c2k]}</div>`:''}</div>`;
   });
   html+='</div></div>';
   return html;
