@@ -243,6 +243,10 @@ body{background:var(--bg);color:var(--text);font-family:'Nunito',sans-serif;font
   <span class="admin-hint" id="admin-hint">View-only — scores update live</span>
 </div>
 <div class="last-updated" id="last-updated">Waiting for data...</div>
+<div id="info-bar" style="display:flex;flex-wrap:wrap;gap:4px 16px;align-items:center;justify-content:space-between;padding:8px 16px;background:var(--surface2,#f3efe4);border-bottom:1px solid var(--border);font-size:12px;color:var(--text)">
+  <div id="countdown-text" style="font-weight:700"></div>
+  <div id="banter-text" style="font-weight:800;color:var(--green)"></div>
+</div>
 <nav class="nav">
   <div class="nav-tab active" onclick="showPanel('sweepstake',this)">Sweepstake</div>
   <div class="nav-tab" onclick="showPanel('leaderboard',this)">Leaderboard</div>
@@ -251,6 +255,7 @@ body{background:var(--bg);color:var(--text);font-family:'Nunito',sans-serif;font
   <div class="nav-tab" onclick="showPanel('knockouts',this)">Knockouts</div>
   <div class="nav-tab" onclick="showPanel('qualified',this)">In / Out</div>
   <div class="nav-tab" onclick="showPanel('stats',this)">Stats</div>
+  <div class="nav-tab" onclick="showPanel('my-teams',this)">My Teams</div>
 </nav>
 <div class="main">
   <div id="panel-sweepstake"  class="panel active"></div>
@@ -260,6 +265,7 @@ body{background:var(--bg);color:var(--text);font-family:'Nunito',sans-serif;font
   <div id="panel-knockouts"   class="panel"></div>
   <div id="panel-qualified"   class="panel"></div>
   <div id="panel-stats"       class="panel"></div>
+  <div id="panel-my-teams"    class="panel"></div>
 </div>
 <div class="modal-overlay" id="admin-modal">
   <div class="modal">
@@ -486,7 +492,7 @@ onValue(teamCardsRef,   s=>{ teamCards   = s.val()||{}; sync(); });
 onValue(ref(db,'.info/connected'), s=>{ s.val()?setSyncOn():setSyncOff(); });
 
 function sync(){
-  renderHeroStats(); updateTicker(); refreshPanel();
+  renderHeroStats(); updateTicker(); refreshPanel(); updateInfoBar();
   const now = new Date();
   const el = document.getElementById('last-updated');
   if(el) el.textContent='Last updated: '+now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -619,12 +625,42 @@ function getQualifiedTeams(){
 
 function tierOf(t){ for(const [n,ts] of Object.entries(TIERS)) if(ts.includes(t)) return +n; return 0; }
 
+// Parse a scorer string's trailing minute into a sortable value.
+// Handles stoppage/extra time: "45+5'" sorts after "45'" but before "46'".
+function goalMinuteVal(s){
+  const m=(s||'').match(/(\d+)(?:\+(\d+))?'?\s*$/);
+  if(!m) return 1e9;                 // no minute found -> sink to bottom
+  return (+m[1])*100 + (m[2]?+m[2]:0);
+}
+function minuteLabel(s){
+  const m=(s||'').match(/(\d+(?:\+\d+)?)'?\s*$/);
+  return m?m[1]+"'":'';
+}
+// Combine a side's goals so each player appears once with all their minutes
+// (e.g. "Balogun 31', 45+5'"), players ordered by their first goal.
+function aggregateGoals(arr){
+  const order=[], map={};
+  (arr||[]).forEach(s=>{
+    const name=stripMinute(s);
+    if(!name) return;
+    const val=goalMinuteVal(s);
+    if(!map[name]){ map[name]={name,mins:[],first:val}; order.push(name); }
+    map[name].mins.push({val,label:minuteLabel(s)});
+    if(val<map[name].first) map[name].first=val;
+  });
+  const players=order.map(n=>map[n]);
+  players.forEach(p=>p.mins.sort((a,b)=>a.val-b.val));
+  players.sort((a,b)=>a.first-b.first);
+  return players.map(p=>`${p.name} ${p.mins.map(x=>x.label).join(', ')}`);
+}
+
 function goalscorerRow(key){
   const gs=goalscorers[key];
   if(!gs||(!gs.home?.length&&!gs.away?.length)) return '';
-  const hl=(gs.home||[]).join(' · ');
-  const al=(gs.away||[]).join(' · ');
-  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px 14px 8px;background:var(--surface2);border:2px solid var(--border);border-top:none;border-radius:0 0 var(--radius) var(--radius);font-size:11px;color:var(--muted);font-weight:600"><div style="text-align:right">${hl}</div><div>${al}</div></div>`;
+  const side=(arr,align)=>aggregateGoals(arr).map(s=>`<div style="text-align:${align};line-height:1.5">${s}</div>`).join('');
+  const hl=side(gs.home,'right');
+  const al=side(gs.away,'left');
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0;padding:6px 14px 8px;background:var(--surface2);border:2px solid var(--border);border-top:none;border-radius:0 0 var(--radius) var(--radius);font-size:11px;color:var(--muted);font-weight:600"><div style="padding-right:12px;border-right:1px solid var(--border)">${hl}</div><div style="padding-left:12px">${al}</div></div>`;
 }
 
 // ── LIVE TICKER ───────────────────────────────────────────
@@ -690,7 +726,7 @@ function renderBracket(){
       const tRow=(team,score)=>{
         if(!team) return `<div class="bracket-team tbd"><div class="bracket-team-left"><span>TBD</span></div></div>`;
         const owners=ownerOf(team);
-        return `<div class="bracket-team ${winner===team?'winner':''}"><div class="bracket-team-left">${flag(team)}<span>${team}</span></div>${owners.length?`<span class="bracket-owner">${owners[0]}</span>`:''}<span class="bracket-score">${score!=null?score:''}</span></div>`;
+        return `<div class="bracket-team ${winner===team?'winner':''}"><div class="bracket-team-left">${flag(team)}<span>${team}</span></div>${owners.length?`<span class="bracket-owner" style="display:inline-flex;align-items:center;gap:3px">${colorDot(owners[0],7)}${owners[0]}</span>`:''}<span class="bracket-score">${score!=null?score:''}</span></div>`;
       };
       html+=`<div class="bracket-match">${tRow(m.home||null,has?m.hs:null)}${tRow(m.away||null,has?m.as:null)}</div>`;
     }
@@ -750,6 +786,151 @@ function computeRanks(rows, valOf){
 }
 function ordinal(n){ return n===1?'1st':n===2?'2nd':n===3?'3rd':String(n); }
 
+// ── PER-MATE IDENTITY ─────────────────────────────────────
+const PLAYER_COLORS = {
+  "Kyle":"#E63946","Chec":"#F4A261","Quill":"#2A9D8F","Harvey P":"#457B9D",
+  "Ell":"#E76F51","Sammy":"#8338EC","Aaron":"#FB8500","Matt":"#06A77D",
+  "Dan":"#D62828","Will B":"#1D3557","Joe":"#9D4EDD","Bren":"#386641"
+};
+function initials(name){ return name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
+function playerBadge(name,size=26){
+  const c=PLAYER_COLORS[name]||'#888';
+  return `<span style="display:inline-flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:50%;background:${c};color:#fff;font-weight:800;font-size:${Math.round(size*0.42)}px;flex-shrink:0;line-height:1">${initials(name)}</span>`;
+}
+function colorDot(name,size=8){
+  return `<span style="width:${size}px;height:${size}px;border-radius:50%;background:${PLAYER_COLORS[name]||'#888'};display:inline-block;flex-shrink:0"></span>`;
+}
+
+// ── COUNT-UP ANIMATION ────────────────────────────────────
+function countUp(el,from,to){
+  if(!el) return;
+  from=+from||0; to=+to||0;
+  if(from===to){ el.textContent=to; return; }
+  const dur=600, start=performance.now();
+  (function step(now){
+    const t=Math.min(1,(now-start)/dur), e=1-Math.pow(1-t,3);
+    el.textContent=Math.round(from+(to-from)*e);
+    if(t<1) requestAnimationFrame(step); else el.textContent=to;
+  })(performance.now());
+}
+let heroPrev={played:0,goals:0,teamsLeft:48};
+
+// ── AUTO-BANTER ───────────────────────────────────────────
+function banterLines(){
+  const ranked=PARTICIPANTS.map(n=>({name:n,...getPlayerScore(n)})).sort((a,b)=>b.total-a.total||b.goals-a.goals);
+  if(!ranked.some(r=>r.total>0)) return ["12 mates. 48 teams. One champion.","Group stage is heating up...","Everyone level — let battle commence."];
+  const top=ranked[0], bottom=ranked[ranked.length-1], lines=[];
+  lines.push(`${top.name} leads the pack on ${top.total} pts`);
+  if(ranked[1]&&ranked[1].total<top.total) lines.push(`${ranked[1].name} chasing ${top.name} — ${top.total-ranked[1].total} pts back`);
+  else if(ranked[1]) lines.push(`${top.name} and ${ranked[1].name} neck and neck at the top`);
+  lines.push(`${bottom.name} propping up the table on ${bottom.total}`);
+  const ts=computeScorers()[0];
+  if(ts){ const pk=getPickerOf(ts.name); lines.push(`${ts.name} leads the Golden Boot on ${ts.goals}${pk.length?` (${pk.join(', ')})`:''}`); }
+  return lines;
+}
+
+// ── COUNTDOWN TO NEXT MATCH ───────────────────────────────
+const MONTHS={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+function koToDate(label){
+  const m=(label||'').match(/(\d+)\s+(\w+),\s+(\d+):(\d+)/);
+  if(!m||MONTHS[m[2]]==null) return null;
+  return new Date(Date.UTC(2026,MONTHS[m[2]],+m[1],+m[3]-1,+m[4])); // BST = UTC+1
+}
+function nextMatchInfo(){
+  const now=Date.now(); let best=null;
+  allGroupMatches.forEach(m=>{
+    const d=koToDate(m.ko); if(!d) return;
+    const sc=scores[m.home+'_'+m.away];
+    const played=sc&&sc.hs!=null&&sc.as!=null;
+    if(d.getTime()>now-2*3600*1000 && !played){ if(!best||d<best.date) best={date:d,m}; }
+  });
+  return best;
+}
+function fmtCountdown(ms){
+  if(ms<=0) return 'kicking off';
+  const s=Math.floor(ms/1000), d=Math.floor(s/86400), h=Math.floor((s%86400)/3600), mn=Math.floor((s%3600)/60);
+  if(d>0) return `${d}d ${h}h`;
+  if(h>0) return `${h}h ${mn}m`;
+  return `${mn}m`;
+}
+let banterIdx=0;
+function updateInfoBar(){
+  const cEl=document.getElementById('countdown-text');
+  const bEl=document.getElementById('banter-text');
+  if(cEl){
+    const nm=nextMatchInfo();
+    cEl.innerHTML = nm
+      ? `<b>Next:</b> ${flag(nm.m.home)} ${nm.m.home} v ${nm.m.away} ${flag(nm.m.away)} &nbsp;·&nbsp; ${fmtCountdown(nm.date.getTime()-Date.now())}`
+      : `<b>Group stage done</b> — knockouts await`;
+  }
+  if(bEl){ const l=banterLines(); bEl.textContent=l[banterIdx%l.length]; }
+}
+
+// ── MY TEAMS ──────────────────────────────────────────────
+let myName=(()=>{ try{ return localStorage.getItem('gm_myname')||''; }catch(e){ return ''; } })();
+window.setMyName=v=>{ myName=v; try{ localStorage.setItem('gm_myname',v); }catch(e){} renderMyTeams(); };
+function teamNextMatch(team){
+  for(const m of allGroupMatches.filter(m=>m.home===team||m.away===team)){
+    const sc=scores[m.home+'_'+m.away];
+    if(!(sc&&sc.hs!=null&&sc.as!=null)){ const opp=m.home===team?m.away:m.home; return `${flag(opp)} ${opp} — ${m.ko}`; }
+  }
+  return null;
+}
+function teamLastResult(team){
+  let last=null;
+  allGroupMatches.filter(m=>m.home===team||m.away===team).forEach(m=>{
+    const sc=scores[m.home+'_'+m.away];
+    if(sc&&sc.hs!=null&&sc.as!=null){
+      const opp=m.home===team?m.away:m.home;
+      const tf=m.home===team?+sc.hs:+sc.as, ta=m.home===team?+sc.as:+sc.hs;
+      const res=tf>ta?'W':tf<ta?'L':'D';
+      last=`<b style="color:${res==='W'?'var(--green)':res==='L'?'#c1121f':'var(--muted)'}">${res}</b> ${tf}–${ta} vs ${flag(opp)} ${opp}`;
+    }
+  });
+  return last;
+}
+function renderMyTeams(){
+  const el=document.getElementById('panel-my-teams'); if(!el) return;
+  let html=`<div style="margin-bottom:16px"><label style="font-size:12px;font-weight:800;color:var(--muted);display:block;margin-bottom:6px">Who are you?</label><select onchange="setMyName(this.value)" style="width:100%;max-width:260px;padding:10px 12px;border:2px solid var(--border);border-radius:10px;background:var(--surface);font-family:'Nunito',sans-serif;font-size:14px;font-weight:700;cursor:pointer"><option value="">Select your name…</option>${PARTICIPANTS.map(n=>`<option value="${n}" ${myName===n?'selected':''}>${n}</option>`).join('')}</select></div>`;
+  if(!myName){ el.innerHTML=html+'<div class="empty"><div class="empty-icon">&#128064;</div>Pick your name to see your teams, fixtures and points.</div>'; return; }
+  const sc=getPlayerScore(myName);
+  const ranked=PARTICIPANTS.map(n=>({name:n,...getPlayerScore(n)})).sort((a,b)=>b.total-a.total||b.goals-a.goals);
+  const rank=ranked.findIndex(r=>r.name===myName)+1;
+  html+=`<div style="display:flex;align-items:center;gap:12px;background:var(--surface);border:2px solid var(--border);border-radius:var(--radius-lg);padding:14px;margin-bottom:16px;box-shadow:var(--shadow)">${playerBadge(myName,46)}<div style="flex:1"><div style="font-weight:900;font-size:17px">${myName}</div><div style="font-size:12px;color:var(--muted);font-weight:700">${ordinal(rank)} of ${PARTICIPANTS.length} · ${sc.koWins} KO win${sc.koWins!==1?'s':''} · ${sc.goals} goals</div></div><div style="text-align:right"><div style="font-family:'Abril Fatface',serif;font-size:28px;color:var(--green);line-height:1">${sc.total}</div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">points</div></div></div>`;
+  html+='<div style="display:flex;flex-direction:column;gap:10px">';
+  (PRESET_TEAMS[myName]||[]).forEach(team=>{
+    const gid=Object.keys(GROUPS).find(g=>GROUPS[g].includes(team));
+    const st=gid?getStandings(gid).find(s=>s.name===team):null;
+    const pts=getTeamGroupPts(team)+getTeamKoPts(team);
+    const next=teamNextMatch(team), last=teamLastResult(team);
+    html+=`<div style="background:var(--surface);border:2px solid var(--border);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">${flag(team)}<span style="font-weight:800;font-size:15px">${team}</span><span style="margin-left:auto;font-size:11px;color:var(--muted);font-weight:700">Grp ${gid||'?'} · Tier ${tierOf(team)}</span></div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);font-weight:700;margin-bottom:${(last||next)?'7px':'0'}">${st?`<span>${st.p} played</span><span>${st.w}W ${st.d}D ${st.l}L</span>`:'<span>Not started</span>'}<span style="color:var(--green)">${pts} pts</span></div>
+      ${last?`<div style="font-size:12px;margin-bottom:2px">${last}</div>`:''}
+      ${next?`<div style="font-size:12px;color:var(--muted)"><b>Next:</b> ${next}</div>`:(st&&st.p>=3?'<div style="font-size:12px;color:var(--muted)">Group stage complete</div>':'')}
+    </div>`;
+  });
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+// ── PODIUM ────────────────────────────────────────────────
+function renderPodium(ranked){
+  if(ranked.length<3) return '';
+  const cols=[ranked[1],ranked[0],ranked[2]];       // 2nd, 1st, 3rd
+  const heights=[54,76,42], steps=['#C9CBD1','#FFD24A','#D08B53'], place=['2nd','1st','3rd'];
+  let h='<div style="display:flex;justify-content:center;align-items:flex-end;gap:10px;margin:2px 0 22px">';
+  cols.forEach((p,idx)=>{
+    h+=`<div style="display:flex;flex-direction:column;align-items:center;width:30%;max-width:110px">
+      ${playerBadge(p.name,idx===1?48:38)}
+      <div style="font-weight:800;font-size:12px;margin-top:6px;text-align:center;line-height:1.1">${p.name}</div>
+      <div style="font-family:'Abril Fatface',serif;font-size:16px;color:var(--green);line-height:1.2">${p.total}</div>
+      <div style="width:100%;height:${heights[idx]}px;background:${steps[idx]};border-radius:8px 8px 0 0;margin-top:6px;display:flex;align-items:flex-start;justify-content:center;padding-top:5px;font-family:'Abril Fatface',serif;color:rgba(0,0,0,.45);font-size:16px">${place[idx]}</div>
+    </div>`;
+  });
+  return h+'</div>';
+}
+
 // ── HERO STATS ────────────────────────────────────────────
 function renderHeroStats(){
   const played=allGroupMatches.filter(m=>{const sc=scores[m.home+'_'+m.away];return sc&&sc.hs!=null&&sc.as!=null&&!isNaN(+sc.hs)&&!isNaN(+sc.as);}).length;
@@ -766,10 +947,15 @@ function renderHeroStats(){
   const topNum=top?top.goals:'';
 
   document.getElementById('hero-stats').innerHTML=`
-    <div class="stat-block"><div class="stat-num">${played}</div><div class="stat-label">Played</div></div>
-    <div class="stat-block"><div class="stat-num">${goals}</div><div class="stat-label">Goals</div></div>
-    <div class="stat-block"><div class="stat-num">${teamsLeft}</div><div class="stat-label">Teams Left</div></div>
+    <div class="stat-block"><div class="stat-num" id="hs-played">${heroPrev.played}</div><div class="stat-label">Played</div></div>
+    <div class="stat-block"><div class="stat-num" id="hs-goals">${heroPrev.goals}</div><div class="stat-label">Goals</div></div>
+    <div class="stat-block"><div class="stat-num" id="hs-teams">${heroPrev.teamsLeft}</div><div class="stat-label">Teams Left</div></div>
     <div class="stat-block"><div class="stat-num" style="font-size:15px;padding:6px 0 4px">${topStr}${topNum!==''?` <span style="font-size:11px;color:rgba(255,255,255,.6)">(${topNum})</span>`:''}</div><div class="stat-label">Top Scorer</div></div>`;
+
+  countUp(document.getElementById('hs-played'),heroPrev.played,played);
+  countUp(document.getElementById('hs-goals'),heroPrev.goals,goals);
+  countUp(document.getElementById('hs-teams'),heroPrev.teamsLeft,teamsLeft);
+  heroPrev={played,goals,teamsLeft};
 }
 
 // ── SWEEPSTAKE ────────────────────────────────────────────
@@ -787,7 +973,7 @@ function renderSweepstake(){
       return `<div class="team-tag"><span class="tier-dot t${tier}"></span>${flag(t)}<span style="margin-left:3px">${t}</span>${badge}</div>`;
     }).join('');
     const pickRows=picks.map(p=>`<div style="font-size:11px;color:var(--muted);padding:2px 0">&#128095; ${p}</div>`).join('');
-    html+=`<div class="player-card"><div class="player-card-header"><div class="player-name-display">${name}</div></div><div>${rows||'<div style="font-size:11px;color:var(--muted)">No teams yet</div>'}</div>${picks.length?`<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">${pickRows}</div>`:''}</div>`;
+    html+=`<div class="player-card"><div class="player-card-header" style="display:flex;align-items:center;gap:8px">${playerBadge(name,28)}<div class="player-name-display">${name}</div></div><div>${rows||'<div style="font-size:11px;color:var(--muted)">No teams yet</div>'}</div>${picks.length?`<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">${pickRows}</div>`:''}</div>`;
   });
   html+='</div>';
   document.getElementById('panel-sweepstake').innerHTML=html;
@@ -796,7 +982,8 @@ function renderSweepstake(){
 // ── LEADERBOARD ───────────────────────────────────────────
 function renderLeaderboard(){
   const ranked=PARTICIPANTS.map(name=>({name,...getPlayerScore(name)})).sort((a,b)=>b.total-a.total||b.goals-a.goals);
-  let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:14px;font-weight:700;line-height:1.8"><b>Scoring:</b> Group pts (W=3, D=1) + KO wins (R32 +${KO_PTS.r32}, R16 +${KO_PTS.r16}, QF +${KO_PTS.qf}, SF +${KO_PTS.sf}, Final +${KO_PTS.final}, Winner bonus +${KO_PTS.winner}) &nbsp;·&nbsp; Tiebreaker: goals scored</div>
+  let html=renderPodium(ranked);
+  html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:14px;font-weight:700;line-height:1.8"><b>Scoring:</b> Group pts (W=3, D=1) + KO wins (R32 +${KO_PTS.r32}, R16 +${KO_PTS.r16}, QF +${KO_PTS.qf}, SF +${KO_PTS.sf}, Final +${KO_PTS.final}, Winner bonus +${KO_PTS.winner}) &nbsp;·&nbsp; Tiebreaker: goals scored</div>
   <div class="leaderboard"><div class="lb-header"><div></div><div>Player</div><div style="text-align:right">Points</div></div>`;
   ranked.forEach((p,i)=>{
     const medal=i===0?'1st':i===1?'2nd':i===2?'3rd':'';
@@ -804,7 +991,7 @@ function renderLeaderboard(){
     const teams=(PRESET_TEAMS[p.name]||[]).filter(Boolean).map(t=>`${t}`).join(' · ');
     html+=`<div class="lb-row ${i<3?'rank-'+(i+1):''}">
       <div class="lb-rank ${rc}">${medal||i+1}</div>
-      <div><div class="lb-name-col">${p.name}</div><div class="lb-detail">${teams||'—'}</div><div class="lb-breakdown">Group: ${p.groupPts}pts · KO: ${p.koPts}pts · ${p.goals} goals</div></div>
+      <div style="display:flex;align-items:center;gap:9px;min-width:0">${playerBadge(p.name,32)}<div style="min-width:0"><div class="lb-name-col">${p.name}</div><div class="lb-detail">${teams||'—'}</div><div class="lb-breakdown">Group: ${p.groupPts}pts · KO: ${p.koPts}pts · ${p.goals} goals</div></div></div>
       <div class="lb-pts-col"><div class="lb-pts-main">${p.total}</div><div class="lb-pts-sub">${p.koWins} KO win${p.koWins!==1?'s':''}</div></div>
     </div>`;
   });
@@ -1026,6 +1213,7 @@ function refreshPanel(){
   else if(currentPanel==='knockouts')    renderKnockouts();
   else if(currentPanel==='qualified')    renderQualified();
   else if(currentPanel==='stats')        renderStats();
+  else if(currentPanel==='my-teams')     renderMyTeams();
 }
 
 window.showPanel=(name,tab)=>{
@@ -1034,12 +1222,15 @@ window.showPanel=(name,tab)=>{
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('panel-'+name).classList.add('active');
   if(tab) tab.classList.add('active');
-  else{ const idx={sweepstake:0,leaderboard:1,'golden-boot':2,'group-stage':3,knockouts:4,qualified:5,stats:6}[name]; document.querySelectorAll('.nav-tab')[idx].classList.add('active'); }
+  else{ const idx={sweepstake:0,leaderboard:1,'golden-boot':2,'group-stage':3,knockouts:4,qualified:5,stats:6,'my-teams':7}[name]; document.querySelectorAll('.nav-tab')[idx].classList.add('active'); }
   refreshPanel();
 };
 
 renderHeroStats();
 renderSweepstake();
+updateInfoBar();
+setInterval(updateInfoBar, 1000);
+setInterval(()=>{ banterIdx++; }, 5000);
 </script>
 </body>
 </html>
