@@ -1140,7 +1140,10 @@ function certainPositions(gid){
 function autoR32(){
   const map={};
   Object.keys(GROUPS).forEach(gid=>{
-    const c=certainPositions(gid);
+    // Once a group is complete, use the actual final standings, including GD/GF tiebreakers.
+    // Before completion, only auto-fill positions that are mathematically locked on points.
+    const finalSt=groupComplete(gid)?getStandings(gid):null;
+    const c=finalSt?{first:finalSt[0]?.name||null,second:finalSt[1]?.name||null}:certainPositions(gid);
     const set=(code,team)=>{ if(!team) return; const e=R32_MAP[code]; if(!e) return; (map[e[0]]=map[e[0]]||{})[e[1]]=team; };
     set('1'+gid,c.first); set('2'+gid,c.second);
   });
