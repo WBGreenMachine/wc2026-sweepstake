@@ -494,6 +494,15 @@ onValue(teamCardsRef,   s=>{ teamCards   = s.val()||{}; sync(); });
 onValue(ref(db,'.info/connected'), s=>{ s.val()?setSyncOn():setSyncOff(); });
 
 function sync(){
+  // Normalize score keys: ensure our expected home_away keys exist even if the feed wrote them reversed
+  allGroupMatches.forEach(m=>{
+    const expected=m.home+'_'+m.away;
+    const reversed=m.away+'_'+m.home;
+    if(!scores[expected]&&scores[reversed]){
+      const rev=scores[reversed];
+      if(rev&&rev.hs!=null&&rev.as!=null) scores[expected]={hs:+rev.as,as:+rev.hs,live:!!rev.live};
+    }
+  });
   renderHeroStats(); updateTicker(); refreshPanel(); updateInfoBar();
   const now = new Date();
   const el = document.getElementById('last-updated');
@@ -550,9 +559,15 @@ function getStandings(gid){
   const tbl={};
   GROUPS[gid].forEach(t=>tbl[t]={p:0,w:0,d:0,l:0,gf:0,ga:0,pts:0});
   allGroupMatches.filter(m=>m.g===gid).forEach(m=>{
-    const sc=scores[m.home+'_'+m.away];
-    if(!sc||sc.hs==null||sc.as==null) return;
-    const h=+sc.hs,a=+sc.as; if(isNaN(h)||isNaN(a)) return;
+    let sc=scores[m.home+'_'+m.away];
+    let h,a;
+    if(sc&&sc.hs!=null&&sc.as!=null){ h=+sc.hs; a=+sc.as; }
+    else { // try reversed key
+      const rev=scores[m.away+'_'+m.home];
+      if(rev&&rev.hs!=null&&rev.as!=null){ h=+rev.as; a=+rev.hs; }
+      else return;
+    }
+    if(isNaN(h)||isNaN(a)) return;
     tbl[m.home].p++;tbl[m.away].p++;
     tbl[m.home].gf+=h;tbl[m.home].ga+=a;tbl[m.away].gf+=a;tbl[m.away].ga+=h;
     if(h>a){tbl[m.home].w++;tbl[m.home].pts+=3;tbl[m.away].l++;}
@@ -566,7 +581,9 @@ function getStandings(gid){
 function groupComplete(gid){
   return allGroupMatches.filter(m=>m.g===gid).every(m=>{
     const sc=scores[m.home+'_'+m.away];
-    return sc&&sc.hs!=null&&sc.as!=null&&!isNaN(+sc.hs)&&!isNaN(+sc.as);
+    if(sc&&sc.hs!=null&&sc.as!=null&&!isNaN(+sc.hs)&&!isNaN(+sc.as)) return true;
+    const rev=scores[m.away+'_'+m.home];
+    return rev&&rev.hs!=null&&rev.as!=null&&!isNaN(+rev.hs)&&!isNaN(+rev.as);
   });
 }
 
@@ -619,10 +636,138 @@ function getQualifiedTeams(){
   const q=[];
   Object.keys(GROUPS).forEach(gid=>{
     const st=getStandings(gid);
-    if(groupComplete(gid)) q.push(st[0].name,st[1].name);
-    else GROUPS[gid].forEach(t=>q.push(t));
+    if(groupComplete(gid)){
+      q.push(st[0].name,st[1].name);
+      // Include best thirds once all groups are done
+      if(allGroupsComplete()&&isBestThird(st[2].name)) q.push(st[2].name);
+    } else GROUPS[gid].forEach(t=>q.push(t));
   });
   return [...new Set(q)].sort();
+}
+
+function allGroupsComplete(){
+  return Object.keys(GROUPS).every(gid=>{
+    const st=getStandings(gid);
+    // A group is complete if all 4 teams have played 3 matches
+    return st.length===4 && st.every(t=>t.p>=3);
+  });
+}
+
+function getThirdPlacedTable(){
+  return Object.keys(GROUPS).filter(gid=>groupComplete(gid)).map(gid=>{
+    const t=getStandings(gid)[2];
+    return t?{...t,gid,rank:3}:null;
+  }).filter(Boolean).sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf||a.gid.localeCompare(b.gid));
+}
+
+function getBestThirds(){
+  if(!allGroupsComplete()) return [];
+  return getThirdPlacedTable().slice(0,8);
+}
+
+function isBestThird(team){
+  return getBestThirds().some(t=>t.name===team);
+}
+
+// ── THIRD-PLACE R32 ALLOCATION ────────────────────────────
+// Maps which R32 slot (away side) each group winner faces a 3rd-place team
+const THIRD_PLACE_SLOTS={
+  '1E':['r32_1','away'],
+  '1I':['r32_4','away'],
+  '1A':['r32_6','away'],
+  '1L':['r32_7','away'],
+  '1D':['r32_8','away'],
+  '1G':['r32_9','away'],
+  '1B':['r32_12','away'],
+  '1K':['r32_14','away']
+};
+const THIRD_PLACE_ORDER=['1A','1B','1D','1E','1G','1I','1K','1L'];
+// Which groups' 3rd-place teams can be assigned to each slot
+const THIRD_PLACE_CANDIDATES={
+  '1E':'ABCDF',
+  '1I':'CDFGH',
+  '1A':'CEFHI',
+  '1L':'EHIJK',
+  '1D':'BEFIJ',
+  '1G':'AEHIJ',
+  '1B':'EFGIJ',
+  '1K':'DEIJL'
+};
+// FIFA Annex C: official allocation for each combination of 8 qualifying groups
+const THIRD_PLACE_OFFICIAL_LOOKUP={
+  'ABCDEFGH':['C','D','A','B','E','F','G','H'],
+  'ABCDEFGI':['C','D','A','B','E','F','G','I'],
+  'ABCDEFGJ':['C','D','A','B','E','F','G','J'],
+  'ABCDEFGK':['C','D','A','B','E','F','G','K'],
+  'ABCDEFGL':['C','D','A','B','E','F','G','L'],
+  'ABCDEFHI':['C','D','A','B','E','H','F','I'],
+  'ABCDEFHJ':['C','D','A','B','E','H','F','J'],
+  'ABCDEFHK':['C','D','A','B','E','H','F','K'],
+  'ABCDEFHL':['C','D','A','B','E','H','F','L'],
+  'ABCDEFIJ':['C','D','A','B','E','I','F','J'],
+  'ABCDEFIK':['C','D','A','B','E','I','F','K'],
+  'ABCDEFIL':['C','D','A','B','E','I','F','L'],
+  'ABCDEFJK':['C','D','A','B','E','J','F','K'],
+  'ABCDEFJL':['C','D','A','B','E','J','F','L'],
+  'ABCDEFKL':['C','D','A','B','E','K','F','L'],
+  'ABCDEGHI':['C','D','A','B','G','H','E','I'],
+  'ABCDEGHJ':['C','D','A','B','G','H','E','J'],
+  'ABCDEGHK':['C','D','A','B','G','H','E','K'],
+  'ABCDEGHL':['C','D','A','B','G','H','E','L'],
+  'ABCDEGIJ':['C','D','A','B','G','I','E','J'],
+  'ABCDEGIK':['C','D','A','B','G','I','E','K'],
+  'ABCDEGIL':['C','D','A','B','G','I','E','L'],
+  'ABCDEGJK':['C','D','A','B','G','J','E','K'],
+  'ABCDEGJL':['C','D','A','B','G','J','E','L'],
+  'ABCDEGKL':['C','D','A','B','G','K','E','L'],
+  'ABCDEHIJ':['C','D','A','B','H','I','E','J'],
+  'ABCDEHIK':['C','D','A','B','H','I','E','K'],
+  'ABCDEHIL':['C','D','A','B','H','I','E','L'],
+  'ABCDEHJK':['C','D','A','B','H','J','E','K'],
+  'ABCDEHJL':['C','D','A','B','H','J','E','L'],
+  'ABCDEHKL':['C','D','A','B','H','K','E','L'],
+  'ABCDEIJK':['C','D','A','B','I','J','E','K'],
+  'ABCDEIJL':['C','D','A','B','I','J','E','L'],
+  'ABCDEIKL':['C','D','A','B','I','K','E','L'],
+  'ABCDEJKL':['C','D','A','B','J','K','E','L'],
+};
+// Backtracking solver for combinations not in the official table
+function fallbackThirdPlaceAllocation(groups){
+  const q=new Set(groups);
+  const slots=THIRD_PLACE_ORDER.map(w=>({winner:w,cands:[...THIRD_PLACE_CANDIDATES[w]].filter(g=>q.has(g))}));
+  if(slots.some(s=>!s.cands.length)) return null;
+  const ordered=[...slots].sort((a,b)=>a.cands.length-b.cands.length);
+  const out={};
+  function backtrack(i,used){
+    if(i===ordered.length) return true;
+    const slot=ordered[i];
+    for(const g of slot.cands){
+      if(used.has(g)) continue;
+      out[slot.winner]=g; used.add(g);
+      if(backtrack(i+1,used)) return true;
+      used.delete(g); delete out[slot.winner];
+    }
+    return false;
+  }
+  return backtrack(0,new Set())?THIRD_PLACE_ORDER.map(w=>out[w]):null;
+}
+
+function thirdPlaceAllocation(){
+  if(!allGroupsComplete()) return {};
+  const groups=getBestThirds().map(t=>t.gid).sort();
+  if(groups.length!==8) return {};
+  const key=groups.join('');
+  const arr=THIRD_PLACE_OFFICIAL_LOOKUP[key]||fallbackThirdPlaceAllocation(groups);
+  if(!arr) return {};
+  const thirdByGroup=Object.fromEntries(getThirdPlacedTable().map(t=>[t.gid,t.name]));
+  const map={};
+  THIRD_PLACE_ORDER.forEach((winnerCode,i)=>{
+    const gid=arr[i];
+    const team=thirdByGroup[gid];
+    const pos=THIRD_PLACE_SLOTS[winnerCode];
+    if(team&&pos) (map[pos[0]]=map[pos[0]]||{})[pos[1]]=team;
+  });
+  return map;
 }
 
 function tierOf(t){ for(const [n,ts] of Object.entries(TIERS)) if(ts.includes(t)) return +n; return 0; }
@@ -991,6 +1136,9 @@ function autoR32(){
     const set=(code,team)=>{ if(!team) return; const e=R32_MAP[code]; if(!e) return; (map[e[0]]=map[e[0]]||{})[e[1]]=team; };
     set('1'+gid,c.first); set('2'+gid,c.second);
   });
+  // Third-place allocation (only once all groups are complete)
+  const thirdMap=thirdPlaceAllocation();
+  Object.entries(thirdMap).forEach(([key,val])=>{ map[key]={...(map[key]||{}),...val}; });
   return map;
 }
 
@@ -1177,9 +1325,18 @@ function renderHeroStats(){
   const played=allGroupMatches.filter(m=>{const sc=scores[m.home+'_'+m.away];return sc&&sc.hs!=null&&sc.as!=null&&!isNaN(+sc.hs)&&!isNaN(+sc.as);}).length;
   const goals=Object.values(scores).reduce((s,sc)=>{if(sc&&sc.hs!=null&&sc.as!=null){const h=+sc.hs,a=+sc.as;if(!isNaN(h)&&!isNaN(a))return s+h+a;}return s;},0);
 
-  // Teams Left = 48 minus teams eliminated (3rd/4th in a completed group)
+  // Teams Left = 48 minus teams definitely eliminated.
+  // 4th place = always out. 3rd place = only out once all groups done AND not best-8 third.
+  const allDone=allGroupsComplete();
   let out=0;
-  Object.keys(GROUPS).forEach(gid=>{ if(groupComplete(gid)){ const st=getStandings(gid); st.forEach((t,i)=>{ if(i>=2) out++; }); } });
+  Object.keys(GROUPS).forEach(gid=>{
+    if(!groupComplete(gid)) return;
+    const st=getStandings(gid);
+    st.forEach((t,i)=>{
+      if(i===3) out++; // 4th always eliminated
+      if(allDone && i===2 && !isBestThird(t.name)) out++; // 3rd eliminated if not best-8
+    });
+  });
   const teamsLeft=48-out;
 
   const scorers=computeScorers();
@@ -1379,26 +1536,58 @@ window.setKoWinner=(key,val)=>{ if(!isAdmin) return; if(!koMatches[key]) koMatch
 
 // ── IN / OUT ──────────────────────────────────────────────
 function renderQualified(){
-  const inT=[],outT=[],tbdT=[];
+  const inT=[],outT=[],tbdT=[],pendingThirds=[];
+  const allDone=allGroupsComplete();
   Object.keys(GROUPS).forEach(gid=>{
     const st=getStandings(gid);const done=groupComplete(gid);
-    st.forEach((t,i)=>{ if(!done) tbdT.push({name:t.name,gid,rank:i+1}); else if(i<2) inT.push({name:t.name,gid,rank:i+1}); else outT.push({name:t.name,gid,rank:i+1}); });
+    st.forEach((t,i)=>{
+      const row={name:t.name,gid,rank:i+1,pts:t.pts,gd:t.gd,gf:t.gf};
+      if(!done){ tbdT.push(row); }
+      else if(i<2){ inT.push(row); }
+      else if(i===2){
+        if(allDone){
+          if(isBestThird(t.name)) inT.push({...row,bestThird:true});
+          else outT.push(row);
+        } else { pendingThirds.push(row); }
+      }
+      else { outT.push(row); }
+    });
   });
   const total=Object.keys(GROUPS).length;
   const done=Object.keys(GROUPS).filter(g=>groupComplete(g)).length;
   const pct=Math.round(done/total*100);
   let html=`<div style="margin-bottom:18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">Groups progress</span><span style="font-size:12px;font-weight:800;color:var(--green)">${done}/${total} complete</span></div><div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${pct}%"></div></div></div>`;
-  if(!inT.length&&!outT.length){
+  if(!inT.length&&!outT.length&&!pendingThirds.length){
     html+=`<div class="waiting-state"><img class="waiting-gif" src="https://media.giphy.com/media/l0HlBO7eyXzSZkJri/giphy.gif" onerror="this.style.display='none'" alt=""><div class="waiting-title">Nothing to see here... yet!</div><div class="waiting-sub">Waiting for scores to be entered!</div></div>`;
   } else {
     const sad=['&#128557;','&#128128;','&#129312;','&#128553;','&#129686;','&#128544;','&#129318;','&#128556;'];
     html+=`<div class="qualified-grid"><div class="qualified-panel"><div class="qp-header in-header"><span class="qp-emoji">&#127881;</span><span class="qp-title">Through!</span><span class="qp-count">${inT.length}</span></div><div class="qp-list">`;
     if(!inT.length) html+='<div class="empty" style="padding:16px">None yet</div>';
-    else inT.forEach(t=>{html+=`<div class="qp-item">${flag(t.name)}<span>${t.name}</span><span class="rank-tag ${t.rank===1?'rank-1st':'rank-2nd'}">${t.rank===1?'1st':'2nd'}</span><span class="group-tag">Grp ${t.gid}</span></div>`;});
+    else inT.forEach(t=>{
+      const label=t.bestThird?'3rd best':t.rank===1?'1st':'2nd';
+      const cls=t.bestThird?'rank-1st':t.rank===1?'rank-1st':'rank-2nd';
+      html+=`<div class="qp-item">${flag(t.name)}<span>${t.name}</span><span class="rank-tag ${cls}">${label}</span><span class="group-tag">Grp ${t.gid}</span></div>`;
+    });
     html+=`</div></div><div class="qualified-panel"><div class="qp-header out-header"><span class="qp-emoji">&#9992;&#65039;</span><span class="qp-title">Going Home</span><span class="qp-count">${outT.length}</span></div><div class="qp-list">`;
     if(!outT.length) html+='<div class="empty" style="padding:16px">None yet</div>';
     else outT.forEach((t,i)=>{html+=`<div class="qp-item">${flag(t.name)}<span>${t.name}</span><span style="margin-left:4px">${sad[i%sad.length]}</span><span class="group-tag">Grp ${t.gid}</span></div>`;});
     html+='</div></div></div>';
+    // Best-third table once all groups are done
+    if(allDone){
+      const thirdRows=getThirdPlacedTable();
+      html+=`<div style="margin-top:16px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px;font-weight:800">Best third-place table</div><div style="background:var(--surface);border:2px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow)">`;
+      thirdRows.forEach((t,i)=>{
+        const through=i<8;
+        html+=`<div style="display:grid;grid-template-columns:34px 1fr 50px 44px 44px;gap:6px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;${through?'background:var(--green-light)':'opacity:.55'}"><div style="font-family:'Abril Fatface',serif;color:${through?'var(--green)':'var(--muted)'}">${i+1}</div><div style="display:flex;align-items:center;gap:5px">${flag(t.name)} ${t.name} <span class="group-tag">Grp ${t.gid}</span></div><div style="text-align:center;color:var(--green);font-weight:900">${t.pts} pts</div><div style="text-align:center;color:var(--muted)">${t.gd>0?'+':''}${t.gd} GD</div><div style="text-align:center;color:var(--muted)">${t.gf} GF</div></div>`;
+      });
+      html+='</div></div>';
+    }
+    // Pending third-place teams (groups done but not all groups complete yet)
+    if(pendingThirds.length){
+      html+='<div style="margin-top:16px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px;font-weight:800">3rd-place ranking pending</div><div style="display:flex;flex-wrap:wrap;gap:6px">';
+      pendingThirds.forEach(t=>{html+=`<div style="padding:4px 10px;background:var(--surface);border:2px solid var(--border);border-radius:50px;font-size:11px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:4px">${flag(t.name)} ${t.name} <span class="group-tag">Grp ${t.gid}</span></div>`;});
+      html+='</div></div>';
+    }
     if(tbdT.length){
       html+='<div style="margin-top:16px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px;font-weight:800">Still playing</div><div style="display:flex;flex-wrap:wrap;gap:6px">';
       tbdT.forEach(t=>{html+=`<div style="padding:4px 10px;background:var(--surface);border:2px solid var(--border);border-radius:50px;font-size:11px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:4px">${flag(t.name)} ${t.name}</div>`;});
