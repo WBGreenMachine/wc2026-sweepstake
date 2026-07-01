@@ -1512,22 +1512,38 @@ function renderKnockouts(){
       const has=m.home&&m.away&&m.hs!=null&&m.as!=null&&!isNaN(+m.hs)&&!isNaN(+m.as);
       const tied=has&&+m.hs===+m.as;
       if(isAdmin){
-        const opts='<option value="">— TBD —</option>'+allTeams.map(t=>`<option value="${t}" ${m.home===t?'selected':''}>${t}</option>`).join('');
-        const opts2='<option value="">— TBD —</option>'+allTeams.map(t=>`<option value="${t}" ${m.away===t?'selected':''}>${t}</option>`).join('');
-        html+=`<div class="ko-match ${has?'has-score':''} ${tied&&m.winner?'winner-set':''}"><div class="ko-team"><select onchange="setKoTeam('${key}','home',this.value)">${opts}</select></div><div class="score-center"><input class="score-inp" type="number" min="0" max="99" value="${m.hs!=null?m.hs:''}" placeholder="?" oninput="setKoScore('${key}','hs',this.value)"><span class="score-sep">–</span><input class="score-inp" type="number" min="0" max="99" value="${m.as!=null?m.as:''}" placeholder="?" oninput="setKoScore('${key}','as',this.value)"></div><div class="ko-team right"><select onchange="setKoTeam('${key}','away',this.value)">${opts2}</select></div></div>`;
-        if(tied&&m.home&&m.away){
-          const wOpts='<option value="">— Pick winner (pens/ET) —</option>'+[m.home,m.away].map(t=>`<option value="${t}" ${m.winner===t?'selected':''}>${t}</option>`).join('');
-          html+=`<div style="padding:4px 14px 8px;background:var(--gold-light);border:2px solid var(--gold);border-top:none;border-radius:0 0 var(--radius) var(--radius);font-size:12px;font-weight:700;color:#7a5a00;display:flex;align-items:center;gap:8px">Draw — select winner: <select style="padding:4px 8px;border:2px solid var(--gold);border-radius:8px;background:#fff;font-family:'Nunito',sans-serif;font-size:12px;font-weight:700;cursor:pointer" onchange="setKoWinner('${key}',this.value)">${wOpts}</select></div>`;
+        const eff=effectiveKo(key,auto);
+        const effHas=eff.home&&eff.away&&eff.hs!=null&&eff.as!=null&&!isNaN(+eff.hs)&&!isNaN(+eff.as);
+        const effTied=effHas&&+eff.hs===+eff.as;
+        const opts='<option value="">— TBD —</option>'+allTeams.map(t=>`<option value="${t}" ${eff.home===t?'selected':''}>${t}</option>`).join('');
+        const opts2='<option value="">— TBD —</option>'+allTeams.map(t=>`<option value="${t}" ${eff.away===t?'selected':''}>${t}</option>`).join('');
+        html+=`<div class="ko-match ${effHas?'has-score':''} ${effTied&&eff.winner?'winner-set':''}"><div class="ko-team"><select onchange="setKoTeam('${key}','home',this.value)">${opts}</select></div><div class="score-center"><input class="score-inp" type="number" min="0" max="99" value="${eff.hs!=null?eff.hs:''}" placeholder="?" oninput="setKoScore('${key}','hs',this.value)"><span class="score-sep">–</span><input class="score-inp" type="number" min="0" max="99" value="${eff.as!=null?eff.as:''}" placeholder="?" oninput="setKoScore('${key}','as',this.value)"></div><div class="ko-team right"><select onchange="setKoTeam('${key}','away',this.value)">${opts2}</select></div></div>`;
+        if(effTied&&eff.home&&eff.away){
+          const pH=m.penHome!=null?m.penHome:'';
+          const pA=m.penAway!=null?m.penAway:'';
+          html+=`<div style="padding:8px 14px;background:var(--red-light);border:2px solid var(--red);border-top:none;border-radius:0 0 var(--radius) var(--radius);font-size:12px;font-weight:700;color:var(--red)">
+            <div style="margin-bottom:6px">&#9888; PENALTIES — enter shootout score:</div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="font-weight:800">${flag(eff.home)} ${eff.home}</span>
+              <input type="number" min="0" max="99" value="${pH}" placeholder="?" style="width:40px;height:32px;text-align:center;border:2px solid var(--red);border-radius:8px;font-family:'Nunito',sans-serif;font-size:14px;font-weight:900;color:var(--red)" oninput="setKoPenalty('${key}','penHome',this.value)">
+              <span style="font-weight:900">–</span>
+              <input type="number" min="0" max="99" value="${pA}" placeholder="?" style="width:40px;height:32px;text-align:center;border:2px solid var(--red);border-radius:8px;font-family:'Nunito',sans-serif;font-size:14px;font-weight:900;color:var(--red)" oninput="setKoPenalty('${key}','penAway',this.value)">
+              <span style="font-weight:800">${flag(eff.away)} ${eff.away}</span>
+              ${eff.winner?`<span style="margin-left:8px;background:var(--green);color:#fff;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:800">Winner: ${eff.winner}</span>`:''}
+            </div>
+          </div>`;
         }
       } else {
         const eff=effectiveKo(key,auto);
         const effHas=eff.home&&eff.away&&eff.hs!=null&&eff.as!=null&&!isNaN(+eff.hs)&&!isNaN(+eff.as);
         const effTied=effHas&&+eff.hs===+eff.as&&!eff.penHome;
+        const needsPens=effTied&&!eff.winner;
         const lbl=(team)=>{ if(!team) return '<span class="ko-tbd">TBD</span>'; const o=ownerOf(team)[0]; return `${flag(team)} ${team}${o?` <span style="font-size:10px;color:var(--muted);font-weight:700;display:inline-flex;align-items:center;gap:2px;margin-left:2px">${colorDot(o,6)}${o}</span>`:''}`; };
         const hn=lbl(eff.home), an=lbl(eff.away);
         const scoreDisp=effHas?fmtKoScore(eff):`<span class="score-static">?</span><span class="score-sep">–</span><span class="score-static">?</span>`;
-        html+=`<div class="ko-match ${effHas?'has-score':''}"><div class="ko-team">${hn}</div><div class="score-center">${effHas?`<span style="font-family:'Abril Fatface',serif;font-size:18px;color:var(--green)">${scoreDisp}</span>`:scoreDisp}</div><div class="ko-team right">${an}</div></div>`;
-        if(effTied&&eff.winner) html+=`<div style="padding:4px 14px 8px;font-size:11px;font-weight:800;color:#7a5a00;background:var(--gold-light);border:2px solid var(--gold);border-top:none;border-radius:0 0 var(--radius) var(--radius)">Winner: ${flag(eff.winner)} ${eff.winner}</div>`;
+        html+=`<div class="ko-match ${effHas?'has-score':''}" style="${needsPens?'border-color:var(--red)':''}"><div class="ko-team">${hn}</div><div class="score-center">${effHas?`<span style="font-family:'Abril Fatface',serif;font-size:18px;color:var(--green)">${scoreDisp}</span>`:scoreDisp}</div><div class="ko-team right">${an}</div></div>`;
+        if(needsPens) html+=`<div style="padding:6px 14px;font-size:11px;font-weight:800;color:var(--red);background:var(--red-light);border:2px solid var(--red);border-top:none;border-radius:0 0 var(--radius) var(--radius);text-align:center">&#9888; Penalty result pending — admin needs to enter shootout score</div>`;
+        else if(effTied&&eff.winner) html+=`<div style="padding:4px 14px 8px;font-size:11px;font-weight:800;color:#7a5a00;background:var(--gold-light);border:2px solid var(--gold);border-top:none;border-radius:0 0 var(--radius) var(--radius)">Winner: ${flag(eff.winner)} ${eff.winner}${eff.penHome!=null?' ('+eff.penHome+'–'+eff.penAway+' pens)':''}</div>`;
       }
     }
     html+='</div></div>';
@@ -1538,6 +1554,23 @@ function renderKnockouts(){
 window.setKoTeam=(key,side,val)=>{ if(!isAdmin) return; if(!koMatches[key]) koMatches[key]={home:null,away:null,hs:null,as:null,winner:null}; koMatches[key][side]=val||null; saveKo(); };
 window.setKoScore=(key,side,val)=>{ if(!isAdmin) return; if(!koMatches[key]) koMatches[key]={home:null,away:null,hs:null,as:null,winner:null}; koMatches[key][side]=val===''?null:+val; if(!isNaN(+koMatches[key].hs)&&!isNaN(+koMatches[key].as)&&koMatches[key].hs!==koMatches[key].as) koMatches[key].winner=null; saveKo(); };
 window.setKoWinner=(key,val)=>{ if(!isAdmin) return; if(!koMatches[key]) koMatches[key]={home:null,away:null,hs:null,as:null,winner:null}; koMatches[key].winner=val||null; saveKo(); };
+window.setKoPenalty=(key,field,val)=>{
+  if(!isAdmin) return;
+  if(!koMatches[key]) koMatches[key]={home:null,away:null,hs:null,as:null,winner:null};
+  // Copy teams from effectiveKo if not already in koMatches
+  const eff=effectiveKo(key,autoKo());
+  if(!koMatches[key].home&&eff.home) koMatches[key].home=eff.home;
+  if(!koMatches[key].away&&eff.away) koMatches[key].away=eff.away;
+  if(koMatches[key].hs==null&&eff.hs!=null) koMatches[key].hs=eff.hs;
+  if(koMatches[key].as==null&&eff.as!=null) koMatches[key].as=eff.as;
+  koMatches[key][field]=val===''?null:+val;
+  // Auto-determine winner from penalty scores
+  const pH=koMatches[key].penHome, pA=koMatches[key].penAway;
+  if(pH!=null&&pA!=null&&!isNaN(+pH)&&!isNaN(+pA)&&pH!==pA){
+    koMatches[key].winner=+pH>+pA?koMatches[key].home:koMatches[key].away;
+  }
+  saveKo();
+};
 
 // ── IN / OUT ──────────────────────────────────────────────
 function renderQualified(){
