@@ -375,6 +375,7 @@ const KO_ROUNDS = [
   { id:'sf',   label:'Semi-Finals', matches:2,  pts:KO_PTS.sf },
   { id:'final',label:'Final', matches:1, pts:KO_PTS.final },
 ];
+const KO_ADMIN_ROUNDS = [...KO_ROUNDS,{ id:'third', label:'3rd Place', matches:1, pts:0 }];
 const ADMIN_PASSWORD = "greenMachines26";
 
 // Hardcoded group matches with BST kickoff times
@@ -824,11 +825,12 @@ function updateTicker(){
     if(sc.live) liveItems.push(item);
     else resultItems.push(item);
   });
-  KO_ROUNDS.forEach(r=>{
+  const koAutoForTicker=autoKo();
+  KO_ADMIN_ROUNDS.forEach(r=>{
     for(let i=0;i<r.matches;i++){
-      const m=koMatches[r.id+'_'+i];
-      if(!m||!m.home||!m.away||m.hs==null||m.as==null) continue;
-      resultItems.push({home:m.home,away:m.away,hs:m.hs,as:m.as,ho:ownerOf(m.home).join(', '),ao:ownerOf(m.away).join(', '),round:r.label});
+      const eff=effectiveKo(r.id+'_'+i,koAutoForTicker);
+      if(!eff||!eff.home||!eff.away||eff.hs==null||eff.as==null) continue;
+      resultItems.push({home:eff.home,away:eff.away,hs:eff.hs,as:eff.as,penHome:eff.penHome,penAway:eff.penAway,etHome:eff.etHome,etAway:eff.etAway,ho:ownerOf(eff.home).join(', '),ao:ownerOf(eff.away).join(', '),round:r.label});
     }
   });
 
@@ -849,7 +851,10 @@ function updateTicker(){
   }
 
   const doubled=[...allItems,...allItems];
-  track.innerHTML=doubled.map(it=>`<div class="ticker-item">${flag(it.home)} ${it.home} <span class="ticker-score">${it.hs}–${it.as}</span> ${it.away} ${flag(it.away)}${(it.ho||it.ao)?` <span class="ticker-owners">(${it.ho||'?'} vs ${it.ao||'?'})</span>`:''}</div>`).join('');
+  track.innerHTML=doubled.map(it=>{
+    const penTxt=(it.penHome!=null&&it.penAway!=null)?` <span style="font-size:10px;font-weight:800;opacity:.7">(${it.penHome}–${it.penAway}p)</span>`:'';
+    return `<div class="ticker-item">${flag(it.home)} ${it.home} <span class="ticker-score">${it.hs}–${it.as}${penTxt}</span> ${it.away} ${flag(it.away)}${(it.ho||it.ao)?` <span class="ticker-owners">(${it.ho||'?'} vs ${it.ao||'?'})</span>`:''}</div>`;
+  }).join('');
 }
 
 // ── BRACKET ───────────────────────────────────────────────
@@ -876,7 +881,7 @@ function renderBracket(){
         const owners=ownerOf(team);
         return `<div class="bracket-team ${winner===team?'winner':''}"><div class="bracket-team-left">${flag(team)}<span>${team}</span></div>${owners.length?`<span class="bracket-owner" style="display:inline-flex;align-items:center;gap:3px">${colorDot(owners[0],7)}${owners[0]}</span>`:''}<span class="bracket-score">${score!=null?score:''}</span></div>`;
       };
-      html+=`<div class="bracket-match">${tRow(m.home||null,has?m.hs:null)}${tRow(m.away||null,has?m.as:null)}</div>`;
+      html+=`<div class="bracket-match">${tRow(m.home||null,has?m.hs:null)}${tRow(m.away||null,has?m.as:null)}${bracketPenBadge(m)}</div>`;
     }
     html+=`<div style="flex:${(spacing-1)/2}"></div></div>`;
   });
@@ -1079,6 +1084,23 @@ function renderPodium(ranked){
   return h+'</div>';
 }
 
+// ── KO SCORE FORMATTING ───────────────────────────────────
+// Format a KO match score for display: "2-1", "1-1 (aet)", "1-1 (4-3 pens)"
+function fmtKoScore(m){
+  if(!m||m.hs==null||m.as==null) return null;
+  const base=`${m.hs}–${m.as}`;
+  if(m.penHome!=null&&m.penAway!=null) return `${base} <span style="font-size:10px;font-weight:800;color:var(--muted);font-family:'Nunito',sans-serif">(${m.penHome}–${m.penAway} pens)</span>`;
+  if(m.etHome!=null&&m.etAway!=null) return `${base} <span style="font-size:10px;font-weight:800;color:var(--muted);font-family:'Nunito',sans-serif">(aet)</span>`;
+  return base;
+}
+// For the bracket (per-team score + small penalty indicator on the match card)
+function bracketPenBadge(m){
+  if(!m) return '';
+  if(m.penHome!=null&&m.penAway!=null) return `<div style="text-align:center;font-size:8px;font-weight:800;color:var(--muted);padding:1px 0;border-top:1px solid var(--border);background:var(--surface2)">${m.penHome}–${m.penAway} pens</div>`;
+  if(m.etHome!=null&&m.etAway!=null) return `<div style="text-align:center;font-size:8px;font-weight:800;color:var(--muted);padding:1px 0;border-top:1px solid var(--border);background:var(--surface2)">aet</div>`;
+  return '';
+}
+
 // ── MATCH TEAM CELL (with owner) ──────────────────────────
 function matchTeamCell(team,side){
   const o=ownerOf(team)[0];
@@ -1088,67 +1110,27 @@ function matchTeamCell(team,side){
   return `<div class="match-${side}" style="flex-direction:column;align-items:${align}"><div style="display:flex;align-items:center;gap:5px">${teamLine}</div>${ownerLine}</div>`;
 }
 
-// ── KNOCKOUT AUTO-FILL (locks only when 1st/2nd mathematically certain) ──
-// 2026 R32 bracket: position code -> [slotKey, side]. Third-place slots omitted.
-const R32_MAP={
-  // Visual slot 0-1: M74 (1E vs 3rd), M77 (1I vs 3rd)
-  '1E':['r32_0','home'],
-  '1I':['r32_1','home'],
-  // Visual slot 2-3: M73 (2A vs 2B), M75 (1F vs 2C)
-  '2A':['r32_2','home'],'2B':['r32_2','away'],
-  '1F':['r32_3','home'],'2C':['r32_3','away'],
-  // Visual slot 4-5: M83 (2K vs 2L), M84 (1H vs 2J)
-  '2K':['r32_4','home'],'2L':['r32_4','away'],
-  '1H':['r32_5','home'],'2J':['r32_5','away'],
-  // Visual slot 6-7: M81 (1D vs 3rd), M82 (1G vs 3rd)
-  '1D':['r32_6','home'],
-  '1G':['r32_7','home'],
-  // Visual slot 8-9: M76 (1C vs 2F), M78 (2E vs 2I)
-  '1C':['r32_8','home'],'2F':['r32_8','away'],
-  '2E':['r32_9','home'],'2I':['r32_9','away'],
-  // Visual slot 10-11: M79 (1A vs 3rd), M80 (1L vs 3rd)
-  '1A':['r32_10','home'],
-  '1L':['r32_11','home'],
-  // Visual slot 12-13: M86 (1J vs 2H), M88 (2D vs 2G)
-  '1J':['r32_12','home'],'2H':['r32_12','away'],
-  '2D':['r32_13','home'],'2G':['r32_13','away'],
-  // Visual slot 14-15: M85 (1B vs 3rd), M87 (1K vs 3rd)
-  '1B':['r32_14','home'],
-  '1K':['r32_15','home']
+// ── KNOCKOUT AUTO-FILL ─────────────────────────────────────
+// Hardcoded from the published FIFA bracket (group stage is over, bracket is fixed)
+const HARDCODED_R32 = {
+  r32_0:  {home:'Germany',away:'Paraguay'},                  // M74
+  r32_1:  {home:'France',away:'Sweden'},                     // M77
+  r32_2:  {home:'South Africa',away:'Canada'},               // M73
+  r32_3:  {home:'Netherlands',away:'Morocco'},               // M75
+  r32_4:  {home:'Portugal',away:'Croatia'},                  // M83
+  r32_5:  {home:'Spain',away:'Austria'},                     // M84
+  r32_6:  {home:'United States',away:'Bosnia-Herzegovina'},  // M81
+  r32_7:  {home:'Belgium',away:'Senegal'},                   // M82
+  r32_8:  {home:'Brazil',away:'Japan'},                      // M76
+  r32_9:  {home:'Ivory Coast',away:'Norway'},                // M78
+  r32_10: {home:'Mexico',away:'Ecuador'},                    // M79
+  r32_11: {home:'England',away:'DR Congo'},                  // M80
+  r32_12: {home:'Argentina',away:'Cape Verde'},              // M86
+  r32_13: {home:'Australia',away:'Egypt'},                   // M88
+  r32_14: {home:'Switzerland',away:'Algeria'},               // M85
+  r32_15: {home:'Colombia',away:'Ghana'},                    // M87
 };
-// A team's exact finish is "certain" only on points: it can't be caught (1st)
-// or it's sure to be 2nd (exactly one team certainly above, the rest certainly below).
-function certainPositions(gid){
-  const st=getStandings(gid);
-  const info=st.map(t=>({name:t.name,pts:t.pts,rem:3-t.p}));
-  const res={first:null,second:null};
-  const others=info.length-1;
-  info.forEach(T=>{
-    const Tmax=T.pts+3*T.rem, Tmin=T.pts;
-    let above=0, below=0;
-    info.forEach(R=>{ if(R.name===T.name) return;
-      const Rmax=R.pts+3*R.rem;
-      if(R.pts>Tmax) above++;          // R can't be caught by T -> R above
-      else if(Tmin>Rmax) below++;      // T can't be caught by R -> T above
-    });
-    if(above===0 && below===others) res.first=T.name;
-    else if(above===1 && below===others-1) res.second=T.name;
-  });
-  return res;
-}
-function autoR32(){
-  const map={};
-  Object.keys(GROUPS).forEach(gid=>{
-    const finalSt=groupComplete(gid)?getStandings(gid):null;
-    const c=finalSt?{first:finalSt[0]?.name||null,second:finalSt[1]?.name||null}:certainPositions(gid);
-    const set=(code,team)=>{ if(!team) return; const e=R32_MAP[code]; if(!e) return; (map[e[0]]=map[e[0]]||{})[e[1]]=team; };
-    set('1'+gid,c.first); set('2'+gid,c.second);
-  });
-  // Third-place allocation (only once all groups are complete)
-  const thirdMap=thirdPlaceAllocation();
-  Object.entries(thirdMap).forEach(([key,val])=>{ map[key]={...(map[key]||{}),...val}; });
-  return map;
-}
+function autoR32(){ return JSON.parse(JSON.stringify(HARDCODED_R32)); }
 
 // Match number → visual bracket slot key mapping
 // R32 pairs must be adjacent so bracket lines connect correctly:
@@ -1223,7 +1205,7 @@ function effectiveKo(key,auto){
       if(rev&&rev.hs!=null&&rev.as!=null){ hs=rev.as; as=rev.hs; } // swap for reversed key
     }
   }
-  return { home, away, hs, as, winner:m.winner, _autoHome:!m.home&&!!am.home, _autoAway:!m.away&&!!am.away };
+  return { home, away, hs, as, winner:m.winner, penHome:m.penHome, penAway:m.penAway, etHome:m.etHome, etAway:m.etAway, _autoHome:!m.home&&!!am.home, _autoAway:!m.away&&!!am.away };
 }
 
 // ── FIXTURES BY DAY ───────────────────────────────────────
@@ -1276,14 +1258,8 @@ function renderFixtures(){
   KO_FIXTURES.forEach(kf=>{
     const lbl=((kf.ko||'').split(',')[0]||'').trim();
     const time=((kf.ko||'').split(',')[1]||'').trim();
-    // Try to resolve position/W/L codes to real teams
+    // Try to resolve position/W/L codes to real teams via autoKo
     const resolve=(code)=>{
-      // R32 position codes (1A, 2B etc.) via auto-fill map
-      const entry = R32_MAP[code];
-      if(entry){
-        const am=(auto[entry[0]]||{});
-        return am[entry[1]]||null;
-      }
       // W/L codes (W73, W74 etc.) — winner/loser of a previous KO match
       const wl=String(code).match(/^([WL])(\d+)$/);
       if(wl){
@@ -1295,8 +1271,10 @@ function renderFixtures(){
       }
       return null;
     };
-    const realHome=resolve(kf.home);
-    const realAway=resolve(kf.away);
+    // For R32 matches, teams come directly from the auto map
+    const autoSlot=auto[koKeyFromNum(kf.num)]||{};
+    const realHome=autoSlot.home||resolve(kf.home);
+    const realAway=autoSlot.away||resolve(kf.away);
     (byDay[lbl]=byDay[lbl]||[]).push({
       home:realHome||kf.home, away:realAway||kf.away,
       isCode:!realHome||!realAway,
@@ -1326,7 +1304,7 @@ function renderFixtures(){
       const has=sc&&sc.hs!=null&&sc.as!=null&&!isNaN(+sc.hs)&&!isNaN(+sc.as);
       const ho=!m.isCode?ownerOf(m.home)[0]:null;
       const ao=!m.isCode?ownerOf(m.away)[0]:null;
-      const mid=has?`<b style="font-family:'Abril Fatface',serif;font-size:16px;color:var(--green)">${sc.hs}–${sc.as}</b>`:`<span style="font-size:11px;font-weight:800;color:var(--muted)">${m.time}</span>`;
+      const mid=has?`<b style="font-family:'Abril Fatface',serif;font-size:16px;color:var(--green)">${fmtKoScore(sc)}</b>`:`<span style="font-size:11px;font-weight:800;color:var(--muted)">${m.time}</span>`;
       const homeFlag=m.isCode?'':flag(m.home);
       const awayFlag=m.isCode?'':flag(m.away);
       const homeName=m.isCode?`<span style="color:var(--muted);font-size:11px">${m.home}</span>`:`${m.home}`;
@@ -1543,10 +1521,13 @@ function renderKnockouts(){
         }
       } else {
         const eff=effectiveKo(key,auto);
+        const effHas=eff.home&&eff.away&&eff.hs!=null&&eff.as!=null&&!isNaN(+eff.hs)&&!isNaN(+eff.as);
+        const effTied=effHas&&+eff.hs===+eff.as&&!eff.penHome;
         const lbl=(team)=>{ if(!team) return '<span class="ko-tbd">TBD</span>'; const o=ownerOf(team)[0]; return `${flag(team)} ${team}${o?` <span style="font-size:10px;color:var(--muted);font-weight:700;display:inline-flex;align-items:center;gap:2px;margin-left:2px">${colorDot(o,6)}${o}</span>`:''}`; };
         const hn=lbl(eff.home), an=lbl(eff.away);
-        html+=`<div class="ko-match ${has?'has-score':''}"><div class="ko-team">${hn}</div><div class="score-center"><span class="score-static">${has?m.hs:'?'}</span><span class="score-sep">–</span><span class="score-static">${has?m.as:'?'}</span></div><div class="ko-team right">${an}</div></div>`;
-        if(tied&&m.winner) html+=`<div style="padding:4px 14px 8px;font-size:11px;font-weight:800;color:#7a5a00;background:var(--gold-light);border:2px solid var(--gold);border-top:none;border-radius:0 0 var(--radius) var(--radius)">Winner: ${flag(m.winner)} ${m.winner}</div>`;
+        const scoreDisp=effHas?fmtKoScore(eff):`<span class="score-static">?</span><span class="score-sep">–</span><span class="score-static">?</span>`;
+        html+=`<div class="ko-match ${effHas?'has-score':''}"><div class="ko-team">${hn}</div><div class="score-center">${effHas?`<span style="font-family:'Abril Fatface',serif;font-size:18px;color:var(--green)">${scoreDisp}</span>`:scoreDisp}</div><div class="ko-team right">${an}</div></div>`;
+        if(effTied&&eff.winner) html+=`<div style="padding:4px 14px 8px;font-size:11px;font-weight:800;color:#7a5a00;background:var(--gold-light);border:2px solid var(--gold);border-top:none;border-radius:0 0 var(--radius) var(--radius)">Winner: ${flag(eff.winner)} ${eff.winner}</div>`;
       }
     }
     html+='</div></div>';
