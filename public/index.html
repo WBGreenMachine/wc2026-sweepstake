@@ -583,12 +583,12 @@ function getTeamGroupGoals(team){
 }
 function getTeamKoPts(team){
   let pts=0;
+  const auto=autoKo();
   KO_ROUNDS.forEach(round=>{
     for(let i=0;i<round.matches;i++){
-      const m=koMatches[round.id+'_'+i];
-      if(!m||m.hs==null||m.as==null) continue;
-      const h=+m.hs,a=+m.as; if(isNaN(h)||isNaN(a)) continue;
-      const winner=(h>a)?m.home:(a>h)?m.away:m.winner||null;
+      const m=effectiveKo(round.id+'_'+i,auto);
+      if(!matchPlayed(m)) continue;
+      const winner=koWinnerOf(m);
       if(winner===team){ pts+=round.pts; if(round.id==='final') pts+=KO_PTS.winner; }
     }
   });
@@ -596,20 +596,19 @@ function getTeamKoPts(team){
 }
 function getPlayerScore(name){
   const teams=PRESET_TEAMS[name]||[];
+  const auto=autoKo();
   let groupPts=0,koPts=0,goals=0,qualified=0,koWins=0;
   teams.forEach(team=>{
     groupPts+=getTeamGroupPts(team);
     goals+=getTeamGroupGoals(team);
     koPts+=getTeamKoPts(team);
-    const inKO=KO_ROUNDS.some(r=>{for(let i=0;i<r.matches;i++){const m=koMatches[r.id+'_'+i];if(m&&(m.home===team||m.away===team))return true;}return false;});
+    const inKO=KO_ROUNDS.some(r=>{for(let i=0;i<r.matches;i++){const m=effectiveKo(r.id+'_'+i,auto);if(m&&(m.home===team||m.away===team))return true;}return false;});
     if(inKO) qualified++;
     KO_ROUNDS.forEach(r=>{
       for(let i=0;i<r.matches;i++){
-        const m=koMatches[r.id+'_'+i];
-        if(!m||m.hs==null||m.as==null) continue;
-        const h=+m.hs,a=+m.as; if(isNaN(h)||isNaN(a)) continue;
-        const winner=(h>a)?m.home:(a>h)?m.away:m.winner||null;
-        if(winner===team) koWins++;
+        const m=effectiveKo(r.id+'_'+i,auto);
+        if(!matchPlayed(m)) continue;
+        if(koWinnerOf(m)===team) koWins++;
       }
     });
   });
@@ -712,10 +711,11 @@ function updateTicker(){
     if(sc.live) liveItems.push(item);
     else resultItems.push(item);
   });
+  const koAutoForTicker=autoKo();
   KO_ADMIN_ROUNDS.forEach(r=>{
     for(let i=0;i<r.matches;i++){
-      const m=koMatches[r.id+'_'+i];
-      if(!m||!m.home||!m.away||m.hs==null||m.as==null) continue;
+      const m=effectiveKo(r.id+'_'+i,koAutoForTicker);
+      if(!m||!m.home||!m.away||!matchPlayed(m)) continue;
       resultItems.push({home:m.home,away:m.away,hs:m.hs,as:m.as,ho:ownerOf(m.home).join(', '),ao:ownerOf(m.away).join(', '),round:r.label});
     }
   });
@@ -748,7 +748,7 @@ function renderBracket(){
     {id:'final',label:'Final',matches:1}
   ];
   let html='<div class="bracket-wrap"><div class="bracket">';
-  const auto=autoR32();
+  const auto=autoKo();
   rounds.forEach(round=>{
     html+=`<div class="bracket-round"><div class="bracket-round-label">${round.label}</div>`;
     const spacing=16/round.matches;
@@ -756,6 +756,8 @@ function renderBracket(){
       if(i>0) html+=`<div style="flex:${spacing-1}"></div>`;
       else html+=`<div style="flex:${(spacing-1)/2}"></div>`;
       const key=round.id+'_'+i;
+      const fixture=koFixtureForKey(key);
+      const fixtureMeta=fixture?koFixtureLabel(fixture,true):'';
       const m=effectiveKo(key,auto);
       const has=m.home&&m.away&&m.hs!=null&&m.as!=null&&!isNaN(+m.hs)&&!isNaN(+m.as);
       const winner=has?(+m.hs>+m.as?m.home:+m.as>+m.hs?m.away:m.winner||null):null;
@@ -764,7 +766,7 @@ function renderBracket(){
         const owners=ownerOf(team);
         return `<div class="bracket-team ${winner===team?'winner':''}"><div class="bracket-team-left">${flag(team)}<span>${team}</span></div>${owners.length?`<span class="bracket-owner" style="display:inline-flex;align-items:center;gap:3px">${colorDot(owners[0],7)}${owners[0]}</span>`:''}<span class="bracket-score">${score!=null?score:''}</span></div>`;
       };
-      html+=`<div class="bracket-match">${tRow(m.home||null,has?m.hs:null)}${tRow(m.away||null,has?m.as:null)}</div>`;
+      html+=`<div class="bracket-match">${fixtureMeta?`<div style="padding:4px 8px;border-bottom:1px solid var(--border);font-size:9px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;text-align:center;background:var(--surface2)">${fixtureMeta}</div>`:''}${tRow(m.home||null,has?m.hs:null)}${tRow(m.away||null,has?m.as:null)}</div>`;
     }
     html+=`<div style="flex:${(spacing-1)/2}"></div></div>`;
   });
@@ -887,7 +889,7 @@ function nextMatchInfo(){
     const sc=scores[m.home+'_'+m.away];
     if(!matchPlayed(sc)) consider(d,{...m,type:'group',homeResolved:true,awayResolved:true});
   });
-  const auto=autoR32();
+  const auto=autoKo();
   (KO_FIXTURES||[]).forEach(kf=>{
     const d=koToDate(kf.ko);
     const key=koKeyFromNum(kf.num);
@@ -929,10 +931,10 @@ function teamNextMatch(team){
     const sc=scores[m.home+'_'+m.away];
     if(!matchPlayed(sc)){ const opp=m.home===team?m.away:m.home; return `${flag(opp)} ${opp} — ${m.ko}`; }
   }
-  const auto=autoR32();
+  const auto=autoKo();
   for(const kf of KO_FIXTURES||[]){
     const key=koKeyFromNum(kf.num);
-    if(key&&matchPlayed(koMatches[key])) continue;
+    if(key&&matchPlayed(effectiveKo(key,auto))) continue;
     const t=fixtureTeamsFor(kf,auto);
     if(t.homeResolved&&t.awayResolved&&(t.home===team||t.away===team)){
       const opp=t.home===team?t.away:t.home;
@@ -1157,6 +1159,41 @@ function effectiveKo(key,auto){
   const am=(auto||{})[key]||{};
   return { home:m.home||am.home||null, away:m.away||am.away||null, hs:m.hs, as:m.as, winner:m.winner, _autoHome:!m.home&&!!am.home, _autoAway:!m.away&&!!am.away };
 }
+function teamFromKoCode(code,auto){
+  if(!code) return null;
+  if(FLAG_CODES[code]) return code;
+  const pos=R32_MAP[code]||THIRD_PLACE_PLACEHOLDER_POS[code];
+  if(pos){
+    const manual=koMatches[pos[0]]||{};
+    const am=(auto||{})[pos[0]]||{};
+    return manual[pos[1]]||am[pos[1]]||null;
+  }
+  const exactThird=String(code).match(/^3([A-L])$/);
+  if(exactThird){
+    const third=(getThirdPlacedTable().find(t=>t.gid===exactThird[1])||{}).name;
+    return third||null;
+  }
+  const wl=String(code).match(/^([WL])(\d+)$/);
+  if(wl){
+    const key=koKeyFromNum(+wl[2]);
+    if(!key) return null;
+    const m=effectiveKo(key,auto);
+    return wl[1]==='W' ? koWinnerOf(m) : koLoserOf(m);
+  }
+  return null;
+}
+function autoKo(){
+  const auto=autoR32();
+  (KO_FIXTURES||[]).slice().sort((a,b)=>a.num-b.num).forEach(kf=>{
+    const key=koKeyFromNum(kf.num);
+    if(!key) return;
+    const manual=koMatches[key]||{};
+    const home=manual.home||teamFromKoCode(kf.home,auto);
+    const away=manual.away||teamFromKoCode(kf.away,auto);
+    if(home||away) auto[key]={...(auto[key]||{}),home:home||null,away:away||null};
+  });
+  return auto;
+}
 
 // ── FIXTURES BY DAY ───────────────────────────────────────
 var KO_FIXTURES = [
@@ -1205,6 +1242,19 @@ const KO_NUM_TO_KEY = (()=>{
   return map;
 })();
 function koKeyFromNum(num){ return KO_NUM_TO_KEY[+num]||null; }
+function koFixtureForKey(key){
+  return (KO_FIXTURES||[]).find(kf=>koKeyFromNum(kf.num)===key)||null;
+}
+function koFixtureLabel(kf,compact=false){
+  if(!kf) return '';
+  const parts=(kf.ko||'').split(',').map(x=>x.trim()).filter(Boolean);
+  const when=parts.length>1?`${parts[0]} · ${parts[1]}`:(parts[0]||'TBC');
+  return `${compact?'M':'Match '}${kf.num} · ${when}`;
+}
+function koFixtureRouteLabel(kf){
+  if(!kf) return '';
+  return `${koFixtureLabel(kf,false)} · ${kf.home} v ${kf.away}`;
+}
 function koWinnerOf(m){
   if(!matchPlayed(m)) return null;
   const h=+m.hs,a=+m.as;
@@ -1220,32 +1270,12 @@ function koLoserOf(m){
   if(!m.winner) return null;
   return m.winner===m.home ? m.away : m.home;
 }
-function resolveKoCode(code,auto=autoR32()){
-  if(!code) return null;
-  if(FLAG_CODES[code]) return code;
-  const pos=R32_MAP[code]||THIRD_PLACE_PLACEHOLDER_POS[code];
-  if(pos){
-    const manual=koMatches[pos[0]]||{};
-    const am=auto[pos[0]]||{};
-    return manual[pos[1]]||am[pos[1]]||null;
-  }
-  const exactThird=String(code).match(/^3([A-L])$/);
-  if(exactThird){
-    const third=(getThirdPlacedTable().find(t=>t.gid===exactThird[1])||{}).name;
-    return third||null;
-  }
-  const wl=String(code).match(/^([WL])(\d+)$/);
-  if(wl){
-    const key=koKeyFromNum(+wl[2]);
-    if(!key) return null;
-    const m=effectiveKo(key,auto);
-    return wl[1]==='W' ? koWinnerOf(m) : koLoserOf(m);
-  }
-  return null;
+function resolveKoCode(code,auto=autoKo()){
+  return teamFromKoCode(code,auto);
 }
-function fixtureTeamsFor(kf,auto=autoR32()){
-  const home=resolveKoCode(kf.home,auto);
-  const away=resolveKoCode(kf.away,auto);
+function fixtureTeamsFor(kf,auto=autoKo()){
+  const home=teamFromKoCode(kf.home,auto);
+  const away=teamFromKoCode(kf.away,auto);
   return {home:home||kf.home,away:away||kf.away,homeResolved:!!home,awayResolved:!!away};
 }
 
@@ -1259,7 +1289,7 @@ function renderFixtures(){
     (byDay[lbl]=byDay[lbl]||[]).push({...m,time,type:'group',homeResolved:true,awayResolved:true});
   });
   // KO matches — resolve position codes, W/L codes and scores where known
-  const auto=autoR32();
+  const auto=autoKo();
   KO_FIXTURES.forEach(kf=>{
     const lbl=((kf.ko||'').split(',')[0]||'').trim();
     const time=((kf.ko||'').split(',')[1]||'').trim();
@@ -1291,7 +1321,7 @@ function renderFixtures(){
     html+=`<div style="margin-bottom:18px"><div style="font-family:'Abril Fatface',serif;font-size:16px;color:var(--green);margin-bottom:8px;display:flex;align-items:center;gap:8px">${day}${isToday?'<span style="font-size:10px;font-weight:800;background:var(--green);color:#fff;padding:2px 8px;border-radius:10px;font-family:Nunito,sans-serif">TODAY</span>':''}</div>`;
     items.forEach(m=>{
       const isKo=m.type==='ko';
-      const sc=isKo?(m.matchKey?koMatches[m.matchKey]:null):scores[m.home+'_'+m.away];
+      const sc=isKo?(m.matchKey?effectiveKo(m.matchKey,auto):null):scores[m.home+'_'+m.away];
       const has=matchPlayed(sc);
       const ho=m.homeResolved?ownerOf(m.home)[0]:null;
       const ao=m.awayResolved?ownerOf(m.away)[0]:null;
@@ -1359,7 +1389,8 @@ function renderSweepstake(){
     const rows=teams.map(t=>{
       if(!t) return '';
       const tier=tierOf(t);
-      const inKO=KO_ROUNDS.some(r=>{for(let i=0;i<r.matches;i++){const m=koMatches[r.id+'_'+i];if(m&&(m.home===t||m.away===t))return true;}return false;});
+      const koAutoForBadge=autoKo();
+      const inKO=KO_ROUNDS.some(r=>{for(let i=0;i<r.matches;i++){const m=effectiveKo(r.id+'_'+i,koAutoForBadge);if(m&&(m.home===t||m.away===t))return true;}return false;});
       const badge=inKO?'<span class="q-badge">KO</span>':'';
       return `<div class="team-tag"><span class="tier-dot t${tier}"></span>${flag(t)}<span style="margin-left:3px">${t}</span>${badge}</div>`;
     }).join('');
@@ -1501,28 +1532,30 @@ function renderKnockouts(){
   html+=`<div style="margin-bottom:24px"><div style="font-family:'Abril Fatface',serif;font-size:20px;color:var(--green);margin-bottom:10px">Tournament Bracket</div>${renderBracket()}</div>`;
   html+=`<div style="background:var(--gold-light);border:2px solid var(--gold);border-radius:var(--radius);padding:10px 16px;margin-bottom:18px;font-size:12px;font-weight:700;color:#7a5a00">Knockout bonus pts: R32 +${KO_PTS.r32} · R16 +${KO_PTS.r16} · QF +${KO_PTS.qf} · SF +${KO_PTS.sf} · Final +${KO_PTS.final} · Winner bonus +${KO_PTS.winner}</div>`;
   const allTeams=Object.values(GROUPS).flat().sort();
-  const auto=autoR32();
+  const auto=autoKo();
   KO_ADMIN_ROUNDS.forEach(round=>{
     const ptsLabel=round.pts?`+${round.pts} pts per win`:'No sweepstake pts';
     html+=`<div class="ko-section"><div class="ko-round-title">${round.label} <span class="ko-pts-badge">${ptsLabel}</span></div><div class="ko-matches">`;
     for(let i=0;i<round.matches;i++){
       const key=round.id+'_'+i;
-      const m=koMatches[key]||{home:null,away:null,hs:null,as:null,winner:null};
-      const has=m.home&&m.away&&m.hs!=null&&m.as!=null&&!isNaN(+m.hs)&&!isNaN(+m.as);
+      const fixture=koFixtureForKey(key);
+      const fixtureMeta=koFixtureRouteLabel(fixture);
+      const raw=koMatches[key]||{};
+      const m=effectiveKo(key,auto);
+      const has=m.home&&m.away&&matchPlayed(m);
       const tied=has&&+m.hs===+m.as;
       if(isAdmin){
         const opts='<option value="">— TBD —</option>'+allTeams.map(t=>`<option value="${t}" ${m.home===t?'selected':''}>${t}</option>`).join('');
         const opts2='<option value="">— TBD —</option>'+allTeams.map(t=>`<option value="${t}" ${m.away===t?'selected':''}>${t}</option>`).join('');
-        html+=`<div class="ko-match ${has?'has-score':''} ${tied&&m.winner?'winner-set':''}"><div class="ko-team"><select onchange="setKoTeam('${key}','home',this.value)">${opts}</select></div><div class="score-center"><input class="score-inp" type="number" min="0" max="99" value="${m.hs!=null?m.hs:''}" placeholder="?" oninput="setKoScore('${key}','hs',this.value)"><span class="score-sep">–</span><input class="score-inp" type="number" min="0" max="99" value="${m.as!=null?m.as:''}" placeholder="?" oninput="setKoScore('${key}','as',this.value)"></div><div class="ko-team right"><select onchange="setKoTeam('${key}','away',this.value)">${opts2}</select></div></div>`;
+        html+=`${fixtureMeta?`<div style="margin:0 0 -2px;padding:5px 14px;background:var(--surface2);border:2px solid var(--border);border-bottom:none;border-radius:var(--radius) var(--radius) 0 0;font-size:10px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${fixtureMeta}</div>`:''}<div class="ko-match ${has?'has-score':''} ${tied&&m.winner?'winner-set':''}" style="${fixtureMeta?'border-radius:0 0 var(--radius) var(--radius)':''}"><div class="ko-team"><select onchange="setKoTeam('${key}','home',this.value)">${opts}</select></div><div class="score-center"><input class="score-inp" type="number" min="0" max="99" value="${raw.hs!=null?raw.hs:''}" placeholder="?" oninput="setKoScore('${key}','hs',this.value)"><span class="score-sep">–</span><input class="score-inp" type="number" min="0" max="99" value="${raw.as!=null?raw.as:''}" placeholder="?" oninput="setKoScore('${key}','as',this.value)"></div><div class="ko-team right"><select onchange="setKoTeam('${key}','away',this.value)">${opts2}</select></div></div>`;
         if(tied&&m.home&&m.away){
           const wOpts='<option value="">— Pick winner (pens/ET) —</option>'+[m.home,m.away].map(t=>`<option value="${t}" ${m.winner===t?'selected':''}>${t}</option>`).join('');
           html+=`<div style="padding:4px 14px 8px;background:var(--gold-light);border:2px solid var(--gold);border-top:none;border-radius:0 0 var(--radius) var(--radius);font-size:12px;font-weight:700;color:#7a5a00;display:flex;align-items:center;gap:8px">Draw — select winner: <select style="padding:4px 8px;border:2px solid var(--gold);border-radius:8px;background:#fff;font-family:'Nunito',sans-serif;font-size:12px;font-weight:700;cursor:pointer" onchange="setKoWinner('${key}',this.value)">${wOpts}</select></div>`;
         }
       } else {
-        const eff=effectiveKo(key,auto);
         const lbl=(team)=>{ if(!team) return '<span class="ko-tbd">TBD</span>'; const o=ownerOf(team)[0]; return `${flag(team)} ${team}${o?` <span style="font-size:10px;color:var(--muted);font-weight:700;display:inline-flex;align-items:center;gap:2px;margin-left:2px">${colorDot(o,6)}${o}</span>`:''}`; };
-        const hn=lbl(eff.home), an=lbl(eff.away);
-        html+=`<div class="ko-match ${has?'has-score':''}"><div class="ko-team">${hn}</div><div class="score-center"><span class="score-static">${has?m.hs:'?'}</span><span class="score-sep">–</span><span class="score-static">${has?m.as:'?'}</span></div><div class="ko-team right">${an}</div></div>`;
+        const hn=lbl(m.home), an=lbl(m.away);
+        html+=`${fixtureMeta?`<div style="margin:0 0 -2px;padding:5px 14px;background:var(--surface2);border:2px solid var(--border);border-bottom:none;border-radius:var(--radius) var(--radius) 0 0;font-size:10px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${fixtureMeta}</div>`:''}<div class="ko-match ${has?'has-score':''}" style="${fixtureMeta?'border-radius:0 0 var(--radius) var(--radius)':''}"><div class="ko-team">${hn}</div><div class="score-center"><span class="score-static">${has?m.hs:'?'}</span><span class="score-sep">–</span><span class="score-static">${has?m.as:'?'}</span></div><div class="ko-team right">${an}</div></div>`;
         if(tied&&m.winner) html+=`<div style="padding:4px 14px 8px;font-size:11px;font-weight:800;color:#7a5a00;background:var(--gold-light);border:2px solid var(--gold);border-top:none;border-radius:0 0 var(--radius) var(--radius)">Winner: ${flag(m.winner)} ${m.winner}</div>`;
       }
     }
@@ -1531,9 +1564,15 @@ function renderKnockouts(){
   document.getElementById('panel-knockouts').innerHTML=html;
 }
 
-window.setKoTeam=(key,side,val)=>{ if(!isAdmin) return; if(!koMatches[key]) koMatches[key]={home:null,away:null,hs:null,as:null,winner:null}; koMatches[key][side]=val||null; saveKo(); };
-window.setKoScore=(key,side,val)=>{ if(!isAdmin) return; if(!koMatches[key]) koMatches[key]={home:null,away:null,hs:null,as:null,winner:null}; koMatches[key][side]=val===''?null:+val; if(!isNaN(+koMatches[key].hs)&&!isNaN(+koMatches[key].as)&&koMatches[key].hs!==koMatches[key].as) koMatches[key].winner=null; saveKo(); };
-window.setKoWinner=(key,val)=>{ if(!isAdmin) return; if(!koMatches[key]) koMatches[key]={home:null,away:null,hs:null,as:null,winner:null}; koMatches[key].winner=val||null; saveKo(); };
+function ensureKoStoredTeams(key){
+  if(!koMatches[key]) koMatches[key]={home:null,away:null,hs:null,as:null,winner:null};
+  const eff=effectiveKo(key,autoKo());
+  if(!koMatches[key].home && eff.home) koMatches[key].home=eff.home;
+  if(!koMatches[key].away && eff.away) koMatches[key].away=eff.away;
+}
+window.setKoTeam=(key,side,val)=>{ if(!isAdmin) return; ensureKoStoredTeams(key); koMatches[key][side]=val||null; if(koMatches[key].winner&&koMatches[key].winner!==koMatches[key].home&&koMatches[key].winner!==koMatches[key].away) koMatches[key].winner=null; saveKo(); };
+window.setKoScore=(key,side,val)=>{ if(!isAdmin) return; ensureKoStoredTeams(key); koMatches[key][side]=val===''?null:+val; if(!isNaN(+koMatches[key].hs)&&!isNaN(+koMatches[key].as)&&koMatches[key].hs!==koMatches[key].as) koMatches[key].winner=null; saveKo(); };
+window.setKoWinner=(key,val)=>{ if(!isAdmin) return; ensureKoStoredTeams(key); koMatches[key].winner=val||null; saveKo(); };
 
 // ── IN / OUT ──────────────────────────────────────────────
 function renderQualified(){
