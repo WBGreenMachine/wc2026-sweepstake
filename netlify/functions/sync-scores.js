@@ -143,7 +143,6 @@ exports.handler = async function () {
     let scored = 0;
 
     for (const m of matches) {
-      if (!m.group) continue;                 // group stage only
       if (!m.score || !m.score.ft) continue;  // skip unplayed
       const home = norm(m.team1);
       const away = norm(m.team2);
