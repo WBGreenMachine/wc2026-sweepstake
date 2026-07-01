@@ -188,31 +188,37 @@ exports.handler = async function () {
       }
 
       // Write KO matches to the ko node (only if both teams are real, not position codes)
+      // Only write entries where we can determine a winner — preserves admin-set penalty winners
       if (m.num && KO_NUM_TO_KEY[m.num] && KNOWN_TEAMS.has(home) && KNOWN_TEAMS.has(away)) {
         const slotKey = KO_NUM_TO_KEY[m.num];
         const entry = { home, away, hs, as: as_ };
+        let hasWinner = false;
 
-        // Determine winner — check penalties, then extra time, then full time
         if (m.score.pen && m.score.pen.length === 2) {
-          // Penalty shootout
           entry.penHome = m.score.pen[0];
           entry.penAway = m.score.pen[1];
           entry.winner = m.score.pen[0] > m.score.pen[1] ? home : away;
+          hasWinner = true;
         } else if (m.score.et && m.score.et.length === 2) {
-          // Extra time (no penalties needed)
           entry.etHome = m.score.et[0];
           entry.etAway = m.score.et[1];
-          entry.hs = m.score.et[0];  // show ET score as the main score
+          entry.hs = m.score.et[0];
           entry.as = m.score.et[1];
-          entry.winner = m.score.et[0] > m.score.et[1] ? home : (m.score.et[1] > m.score.et[0] ? away : null);
+          if (m.score.et[0] !== m.score.et[1]) {
+            entry.winner = m.score.et[0] > m.score.et[1] ? home : away;
+            hasWinner = true;
+          }
         } else if (hs > as_) {
           entry.winner = home;
+          hasWinner = true;
         } else if (as_ > hs) {
           entry.winner = away;
+          hasWinner = true;
         }
-        // If still no winner (draw with no ET/pen data yet), leave winner null
 
-        ko[slotKey] = entry;
+        // Only write to ko when we have a definitive winner
+        // Draws (pending penalty data) are left for admin to resolve
+        if (hasWinner) ko[slotKey] = entry;
       }
     }
 
