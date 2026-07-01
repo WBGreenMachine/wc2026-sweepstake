@@ -178,7 +178,7 @@ body{background:var(--bg);color:var(--text);font-family:'Nunito',sans-serif;font
 .ticker-label{background:#8b0000;padding:8px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;white-space:nowrap;display:flex;align-items:center;gap:6px;flex-shrink:0}
 .ticker-dot{width:8px;height:8px;border-radius:50%;background:#ff6b6b;animation:pulse 1s infinite;flex-shrink:0}
 .ticker-scroll{overflow:hidden;flex:1;padding:8px 0}
-.ticker-track{display:inline-flex;animation:ticker-move 55s linear infinite;white-space:nowrap}
+.ticker-track{display:inline-flex;animation:ticker-move 30s linear infinite;white-space:nowrap}
 .ticker-track:hover{animation-play-state:paused}
 @keyframes ticker-move{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 .ticker-item{display:inline-flex;align-items:center;gap:8px;padding:0 28px;font-size:13px;font-weight:700;white-space:nowrap;border-right:1px solid rgba(255,255,255,.2)}
@@ -613,19 +613,24 @@ function getTeamKoPts(team){
 }
 function getPlayerScore(name){
   const teams=PRESET_TEAMS[name]||[];
+  const auto=autoKo();
   let groupPts=0,koPts=0,goals=0,qualified=0,koWins=0;
   teams.forEach(team=>{
     groupPts+=getTeamGroupPts(team);
     goals+=getTeamGroupGoals(team);
     koPts+=getTeamKoPts(team);
-    const inKO=KO_ROUNDS.some(r=>{for(let i=0;i<r.matches;i++){const m=koMatches[r.id+'_'+i];if(m&&(m.home===team||m.away===team))return true;}return false;});
-    if(inKO) qualified++;
+    // Count KO goals and wins
     KO_ROUNDS.forEach(r=>{
       for(let i=0;i<r.matches;i++){
-        const m=koMatches[r.id+'_'+i];
-        if(!m||m.hs==null||m.as==null) continue;
-        const h=+m.hs,a=+m.as; if(isNaN(h)||isNaN(a)) continue;
-        const winner=(h>a)?m.home:(a>h)?m.away:m.winner||null;
+        const eff=effectiveKo(r.id+'_'+i,auto);
+        if(!eff||!eff.home||!eff.away) continue;
+        if(eff.home===team||eff.away===team) qualified=1;
+        if(eff.hs==null||eff.as==null) continue;
+        const h=+eff.hs,a=+eff.as; if(isNaN(h)||isNaN(a)) continue;
+        // Add KO goals for this team
+        if(eff.home===team) goals+=h;
+        else if(eff.away===team) goals+=a;
+        const winner=koWinnerOf(eff);
         if(winner===team) koWins++;
       }
     });
@@ -813,31 +818,51 @@ function goalscorerRow(key){
 
 // ── LIVE TICKER ───────────────────────────────────────────
 function updateTicker(){
-  const liveItems = [];
-  const resultItems = [];
+  const now=new Date();
+  const todayStr=now.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+  const yest=new Date(now); yest.setDate(yest.getDate()-1);
+  const yestStr=yest.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+  const isRecentDate=(ko)=>{
+    const d=((ko||'').split(',')[0]||'').trim();
+    return d===todayStr||d===yestStr;
+  };
 
+  const liveItems=[], resultItems=[], upcomingItems=[];
+
+  // Group matches
   allGroupMatches.forEach(m=>{
+    if(!isRecentDate(m.ko)) return;
     const sc=scores[m.home+'_'+m.away];
-    if(!sc||sc.hs==null||sc.as==null) return;
-    const ho=ownerOf(m.home).join(', ');
-    const ao=ownerOf(m.away).join(', ');
-    const item={home:m.home,away:m.away,hs:sc.hs,as:sc.as,ho,ao};
-    if(sc.live) liveItems.push(item);
-    else resultItems.push(item);
+    const ho=ownerOf(m.home).join(', '), ao=ownerOf(m.away).join(', ');
+    if(sc&&sc.hs!=null&&sc.as!=null){
+      const item={home:m.home,away:m.away,hs:sc.hs,as:sc.as,ho,ao};
+      if(sc.live) liveItems.push(item); else resultItems.push(item);
+    } else {
+      upcomingItems.push({home:m.home,away:m.away,time:((m.ko||'').split(',')[1]||'').trim(),ho,ao});
+    }
   });
-  const koAutoForTicker=autoKo();
+
+  // KO matches
+  const koAuto=autoKo();
   KO_ADMIN_ROUNDS.forEach(r=>{
     for(let i=0;i<r.matches;i++){
-      const eff=effectiveKo(r.id+'_'+i,koAutoForTicker);
-      if(!eff||!eff.home||!eff.away||eff.hs==null||eff.as==null) continue;
-      resultItems.push({home:eff.home,away:eff.away,hs:eff.hs,as:eff.as,penHome:eff.penHome,penAway:eff.penAway,etHome:eff.etHome,etAway:eff.etAway,ho:ownerOf(eff.home).join(', '),ao:ownerOf(eff.away).join(', '),round:r.label});
+      const key=r.id+'_'+i;
+      const kf=(KO_FIXTURES||[]).find(f=>koKeyFromNum(f.num)===key);
+      if(!kf||!isRecentDate(kf.ko)) continue;
+      const eff=effectiveKo(key,koAuto);
+      if(eff&&eff.home&&eff.away&&eff.hs!=null&&eff.as!=null){
+        resultItems.push({home:eff.home,away:eff.away,hs:eff.hs,as:eff.as,penHome:eff.penHome,penAway:eff.penAway,ho:ownerOf(eff.home).join(', '),ao:ownerOf(eff.away).join(', '),round:r.label});
+      } else if(eff&&eff.home&&eff.away){
+        upcomingItems.push({home:eff.home,away:eff.away,time:((kf.ko||'').split(',')[1]||'').trim(),ho:ownerOf(eff.home).join(', '),ao:ownerOf(eff.away).join(', '),round:r.label});
+      }
     }
   });
 
   const ticker=document.getElementById('live-ticker');
   const track=document.getElementById('ticker-track');
   const label=document.querySelector('.ticker-label');
-  const allItems=[...liveItems,...resultItems];
+  const allScored=[...liveItems,...resultItems];
+  const allItems=[...allScored,...upcomingItems];
   if(!allItems.length){ ticker.classList.remove('active'); return; }
 
   const isLive=liveItems.length>0;
@@ -845,6 +870,9 @@ function updateTicker(){
   if(isLive){
     ticker.style.background='#c1121f';
     label.innerHTML='<div class="ticker-dot"></div>LIVE';
+  } else if(upcomingItems.length&&!allScored.length){
+    ticker.style.background='#1a1a2e';
+    label.innerHTML='TODAY';
   } else {
     ticker.style.background='#2d6a4f';
     label.innerHTML='RESULTS';
@@ -852,9 +880,17 @@ function updateTicker(){
 
   const doubled=[...allItems,...allItems];
   track.innerHTML=doubled.map(it=>{
-    const penTxt=(it.penHome!=null&&it.penAway!=null)?` <span style="font-size:10px;font-weight:800;opacity:.7">(${it.penHome}–${it.penAway}p)</span>`:'';
-    return `<div class="ticker-item">${flag(it.home)} ${it.home} <span class="ticker-score">${it.hs}–${it.as}${penTxt}</span> ${it.away} ${flag(it.away)}${(it.ho||it.ao)?` <span class="ticker-owners">(${it.ho||'?'} vs ${it.ao||'?'})</span>`:''}</div>`;
+    if(it.hs!=null){
+      const penTxt=(it.penHome!=null&&it.penAway!=null)?` <span style="font-size:10px;font-weight:800;opacity:.7">(${it.penHome}–${it.penAway}p)</span>`:'';
+      return `<div class="ticker-item">${flag(it.home)} ${it.home} <span class="ticker-score">${it.hs}–${it.as}${penTxt}</span> ${it.away} ${flag(it.away)}${(it.ho||it.ao)?` <span class="ticker-owners">(${it.ho||'?'} vs ${it.ao||'?'})</span>`:''}</div>`;
+    } else {
+      return `<div class="ticker-item" style="opacity:.8">${flag(it.home)} ${it.home} <span class="ticker-score" style="font-size:12px;color:rgba(255,255,255,.6)">${it.time}</span> ${it.away} ${flag(it.away)}${(it.ho||it.ao)?` <span class="ticker-owners">(${it.ho||'?'} vs ${it.ao||'?'})</span>`:''}</div>`;
+    }
   }).join('');
+
+  // Scale speed to content: ~8s per item, minimum 20s
+  const dur=Math.max(20, allItems.length*8);
+  track.style.animationDuration=dur+'s';
 }
 
 // ── BRACKET ───────────────────────────────────────────────
@@ -1031,6 +1067,7 @@ function teamNextMatch(team){
 }
 function teamLastResult(team){
   let last=null;
+  // Group matches
   allGroupMatches.filter(m=>m.home===team||m.away===team).forEach(m=>{
     const sc=scores[m.home+'_'+m.away];
     if(sc&&sc.hs!=null&&sc.as!=null){
@@ -1038,6 +1075,21 @@ function teamLastResult(team){
       const tf=m.home===team?+sc.hs:+sc.as, ta=m.home===team?+sc.as:+sc.hs;
       const res=tf>ta?'W':tf<ta?'L':'D';
       last=`<b style="color:${res==='W'?'var(--green)':res==='L'?'#c1121f':'var(--muted)'}">${res}</b> ${tf}–${ta} vs ${flag(opp)} ${opp}`;
+    }
+  });
+  // KO matches (overrides group last result if more recent)
+  const auto=autoKo();
+  KO_ROUNDS.forEach(r=>{
+    for(let i=0;i<r.matches;i++){
+      const eff=effectiveKo(r.id+'_'+i,auto);
+      if(!eff||!eff.home||!eff.away||eff.hs==null||eff.as==null) continue;
+      if(eff.home!==team&&eff.away!==team) continue;
+      const opp=eff.home===team?eff.away:eff.home;
+      const tf=eff.home===team?+eff.hs:+eff.as, ta=eff.home===team?+eff.as:+eff.hs;
+      const winner=koWinnerOf(eff);
+      const res=winner===team?'W':winner?'L':'D';
+      const penTxt=(eff.penHome!=null)?` (${eff.penHome}–${eff.penAway}p)`:'';
+      last=`<b style="color:${res==='W'?'var(--green)':res==='L'?'#c1121f':'var(--muted)'}">${res}</b> ${tf}–${ta}${penTxt} vs ${flag(opp)} ${opp} <span style="font-size:10px;color:var(--muted)">${r.label}</span>`;
     }
   });
   return last;
@@ -1324,21 +1376,16 @@ function renderFixtures(){
 
 // ── HERO STATS ────────────────────────────────────────────
 function renderHeroStats(){
-  const played=allGroupMatches.filter(m=>{const sc=scores[m.home+'_'+m.away];return sc&&sc.hs!=null&&sc.as!=null&&!isNaN(+sc.hs)&&!isNaN(+sc.as);}).length;
+  // Count all played matches (group + KO)
+  let played=allGroupMatches.filter(m=>{const sc=scores[m.home+'_'+m.away];return sc&&sc.hs!=null&&sc.as!=null&&!isNaN(+sc.hs)&&!isNaN(+sc.as);}).length;
+  const koAuto=autoKo();
+  KO_ADMIN_ROUNDS.forEach(r=>{for(let i=0;i<r.matches;i++){const eff=effectiveKo(r.id+'_'+i,koAuto);if(eff&&eff.home&&eff.away&&eff.hs!=null&&eff.as!=null&&!isNaN(+eff.hs)&&!isNaN(+eff.as)) played++;}});
   const goals=Object.values(scores).reduce((s,sc)=>{if(sc&&sc.hs!=null&&sc.as!=null){const h=+sc.hs,a=+sc.as;if(!isNaN(h)&&!isNaN(a))return s+h+a;}return s;},0);
-
-  // Teams Left = 48 minus teams definitely eliminated.
-  // 4th place = always out. 3rd place = only out once all groups done AND not best-8 third.
+  // Teams Left = 48 minus group eliminations minus KO losers
   const allDone=allGroupsComplete();
   let out=0;
-  Object.keys(GROUPS).forEach(gid=>{
-    if(!groupComplete(gid)) return;
-    const st=getStandings(gid);
-    st.forEach((t,i)=>{
-      if(i===3) out++; // 4th always eliminated
-      if(allDone && i===2 && !isBestThird(t.name)) out++; // 3rd eliminated if not best-8
-    });
-  });
+  Object.keys(GROUPS).forEach(gid=>{if(!groupComplete(gid))return;const st=getStandings(gid);st.forEach((t,i)=>{if(i===3)out++;if(allDone&&i===2&&!isBestThird(t.name))out++;});});
+  KO_ROUNDS.forEach(r=>{for(let i=0;i<r.matches;i++){if(koWinnerOf(effectiveKo(r.id+'_'+i,koAuto)))out++;}});
   const teamsLeft=48-out;
 
   const scorers=computeScorers();
@@ -1574,64 +1621,68 @@ window.setKoPenalty=(key,field,val)=>{
 
 // ── IN / OUT ──────────────────────────────────────────────
 function renderQualified(){
-  const inT=[],outT=[],tbdT=[],pendingThirds=[];
+  const auto=autoKo();
+  // Build team status: still in, or eliminated (and where)
+  const alive=new Set(), koOut=[], groupOut=[];
+  // Start with all 48 teams
+  Object.values(GROUPS).flat().forEach(t=>alive.add(t));
+  // Remove group-stage eliminations
   const allDone=allGroupsComplete();
-  Object.keys(GROUPS).forEach(gid=>{
-    const st=getStandings(gid);const done=groupComplete(gid);
-    st.forEach((t,i)=>{
-      const row={name:t.name,gid,rank:i+1,pts:t.pts,gd:t.gd,gf:t.gf};
-      if(!done){ tbdT.push(row); }
-      else if(i<2){ inT.push(row); }
-      else if(i===2){
-        if(allDone){
-          if(isBestThird(t.name)) inT.push({...row,bestThird:true});
-          else outT.push(row);
-        } else { pendingThirds.push(row); }
-      }
-      else { outT.push(row); }
-    });
-  });
-  const total=Object.keys(GROUPS).length;
-  const done=Object.keys(GROUPS).filter(g=>groupComplete(g)).length;
-  const pct=Math.round(done/total*100);
-  let html=`<div style="margin-bottom:18px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">Groups progress</span><span style="font-size:12px;font-weight:800;color:var(--green)">${done}/${total} complete</span></div><div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${pct}%"></div></div></div>`;
-  if(!inT.length&&!outT.length&&!pendingThirds.length){
-    html+=`<div class="waiting-state"><img class="waiting-gif" src="https://media.giphy.com/media/l0HlBO7eyXzSZkJri/giphy.gif" onerror="this.style.display='none'" alt=""><div class="waiting-title">Nothing to see here... yet!</div><div class="waiting-sub">Waiting for scores to be entered!</div></div>`;
-  } else {
-    const sad=['&#128557;','&#128128;','&#129312;','&#128553;','&#129686;','&#128544;','&#129318;','&#128556;'];
-    html+=`<div class="qualified-grid"><div class="qualified-panel"><div class="qp-header in-header"><span class="qp-emoji">&#127881;</span><span class="qp-title">Through!</span><span class="qp-count">${inT.length}</span></div><div class="qp-list">`;
-    if(!inT.length) html+='<div class="empty" style="padding:16px">None yet</div>';
-    else inT.forEach(t=>{
-      const label=t.bestThird?'3rd best':t.rank===1?'1st':'2nd';
-      const cls=t.bestThird?'rank-1st':t.rank===1?'rank-1st':'rank-2nd';
-      html+=`<div class="qp-item">${flag(t.name)}<span>${t.name}</span><span class="rank-tag ${cls}">${label}</span><span class="group-tag">Grp ${t.gid}</span></div>`;
-    });
-    html+=`</div></div><div class="qualified-panel"><div class="qp-header out-header"><span class="qp-emoji">&#9992;&#65039;</span><span class="qp-title">Going Home</span><span class="qp-count">${outT.length}</span></div><div class="qp-list">`;
-    if(!outT.length) html+='<div class="empty" style="padding:16px">None yet</div>';
-    else outT.forEach((t,i)=>{html+=`<div class="qp-item">${flag(t.name)}<span>${t.name}</span><span style="margin-left:4px">${sad[i%sad.length]}</span><span class="group-tag">Grp ${t.gid}</span></div>`;});
-    html+='</div></div></div>';
-    // Best-third table once all groups are done
-    if(allDone){
-      const thirdRows=getThirdPlacedTable();
-      html+=`<div style="margin-top:16px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px;font-weight:800">Best third-place table</div><div style="background:var(--surface);border:2px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow)">`;
-      thirdRows.forEach((t,i)=>{
-        const through=i<8;
-        html+=`<div style="display:grid;grid-template-columns:34px 1fr 50px 44px 44px;gap:6px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;${through?'background:var(--green-light)':'opacity:.55'}"><div style="font-family:'Abril Fatface',serif;color:${through?'var(--green)':'var(--muted)'}">${i+1}</div><div style="display:flex;align-items:center;gap:5px">${flag(t.name)} ${t.name} <span class="group-tag">Grp ${t.gid}</span></div><div style="text-align:center;color:var(--green);font-weight:900">${t.pts} pts</div><div style="text-align:center;color:var(--muted)">${t.gd>0?'+':''}${t.gd} GD</div><div style="text-align:center;color:var(--muted)">${t.gf} GF</div></div>`;
+  if(allDone){
+    Object.keys(GROUPS).forEach(gid=>{
+      const st=getStandings(gid);
+      st.forEach((t,i)=>{
+        if(i===3||(i===2&&!isBestThird(t.name))){ alive.delete(t.name); groupOut.push({name:t.name,gid,rank:i+1}); }
       });
-      html+='</div></div>';
-    }
-    // Pending third-place teams (groups done but not all groups complete yet)
-    if(pendingThirds.length){
-      html+='<div style="margin-top:16px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px;font-weight:800">3rd-place ranking pending</div><div style="display:flex;flex-wrap:wrap;gap:6px">';
-      pendingThirds.forEach(t=>{html+=`<div style="padding:4px 10px;background:var(--surface);border:2px solid var(--border);border-radius:50px;font-size:11px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:4px">${flag(t.name)} ${t.name} <span class="group-tag">Grp ${t.gid}</span></div>`;});
-      html+='</div></div>';
-    }
-    if(tbdT.length){
-      html+='<div style="margin-top:16px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px;font-weight:800">Still playing</div><div style="display:flex;flex-wrap:wrap;gap:6px">';
-      tbdT.forEach(t=>{html+=`<div style="padding:4px 10px;background:var(--surface);border:2px solid var(--border);border-radius:50px;font-size:11px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:4px">${flag(t.name)} ${t.name}</div>`;});
-      html+='</div></div>';
-    }
+    });
   }
+  // Remove KO losers
+  const roundLabels={r32:'Round of 32',r16:'Round of 16',qf:'Quarter-Finals',sf:'Semi-Finals',final:'Final',third:'3rd Place'};
+  KO_ROUNDS.forEach(r=>{
+    for(let i=0;i<r.matches;i++){
+      const eff=effectiveKo(r.id+'_'+i,auto);
+      const winner=koWinnerOf(eff);
+      if(winner&&eff.home&&eff.away){
+        const loser=winner===eff.home?eff.away:eff.home;
+        if(alive.has(loser)){
+          alive.delete(loser);
+          const penTxt=(eff.penHome!=null)?` (${eff.penHome}–${eff.penAway}p)`:'';
+          koOut.push({name:loser,round:roundLabels[r.id]||r.label,vs:winner,score:`${eff.hs}–${eff.as}${penTxt}`});
+        }
+      }
+    }
+  });
+
+  let html='';
+  // Still alive
+  const aliveArr=[...alive].sort();
+  html+=`<div class="qualified-panel" style="margin-bottom:16px"><div class="qp-header in-header"><span class="qp-emoji">&#127881;</span><span class="qp-title">Still In</span><span class="qp-count">${aliveArr.length}</span></div><div class="qp-list">`;
+  if(!aliveArr.length) html+='<div class="empty" style="padding:16px">Tournament complete!</div>';
+  else aliveArr.forEach(t=>{
+    const o=ownerOf(t)[0];
+    html+=`<div class="qp-item">${flag(t)}<span>${t}</span>${o?`<span style="margin-left:auto;font-size:10px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:3px">${colorDot(o,6)}${o}</span>`:''}</div>`;
+  });
+  html+='</div></div>';
+
+  // KO eliminations (most recent first)
+  if(koOut.length){
+    html+=`<div class="qualified-panel" style="margin-bottom:16px"><div class="qp-header out-header"><span class="qp-emoji">&#9992;&#65039;</span><span class="qp-title">Knocked Out</span><span class="qp-count">${koOut.length}</span></div><div class="qp-list">`;
+    [...koOut].reverse().forEach(t=>{
+      const o=ownerOf(t.name)[0];
+      html+=`<div class="qp-item" style="flex-wrap:wrap;gap:4px 8px">${flag(t.name)}<span style="font-weight:800">${t.name}</span><span style="font-size:10px;color:var(--red);font-weight:800;background:var(--red-light);padding:2px 8px;border-radius:10px">${t.round}</span><span style="font-size:10px;color:var(--muted);font-weight:700">Lost ${t.score} to ${flag(t.vs)} ${t.vs}</span>${o?`<span style="margin-left:auto;font-size:10px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:3px">${colorDot(o,6)}${o}</span>`:''}</div>`;
+    });
+    html+='</div></div>';
+  }
+
+  // Group stage eliminations
+  if(groupOut.length){
+    html+=`<div class="qualified-panel"><div class="qp-header" style="background:var(--muted)"><span class="qp-emoji">&#128683;</span><span class="qp-title">Eliminated in Groups</span><span class="qp-count">${groupOut.length}</span></div><div class="qp-list">`;
+    groupOut.forEach(t=>{
+      html+=`<div class="qp-item">${flag(t.name)}<span>${t.name}</span><span class="group-tag">Grp ${t.gid} · ${ordinal(t.rank)}</span></div>`;
+    });
+    html+='</div></div>';
+  }
+
   document.getElementById('panel-qualified').innerHTML=html;
 }
 
