@@ -672,14 +672,14 @@ function isBestThird(team){
 // ── THIRD-PLACE R32 ALLOCATION ────────────────────────────
 // Maps which R32 slot (away side) each group winner faces a 3rd-place team
 const THIRD_PLACE_SLOTS={
-  '1E':['r32_1','away'],
-  '1I':['r32_4','away'],
-  '1A':['r32_6','away'],
-  '1L':['r32_7','away'],
-  '1D':['r32_8','away'],
-  '1G':['r32_9','away'],
-  '1B':['r32_12','away'],
-  '1K':['r32_14','away']
+  '1E':['r32_0','away'],   // M74: 1E vs 3rd
+  '1I':['r32_1','away'],   // M77: 1I vs 3rd
+  '1D':['r32_6','away'],   // M81: 1D vs 3rd
+  '1G':['r32_7','away'],   // M82: 1G vs 3rd
+  '1A':['r32_10','away'],  // M79: 1A vs 3rd
+  '1L':['r32_11','away'],  // M80: 1L vs 3rd
+  '1B':['r32_14','away'],  // M85: 1B vs 3rd
+  '1K':['r32_15','away']   // M87: 1K vs 3rd
 };
 const THIRD_PLACE_ORDER=['1A','1B','1D','1E','1G','1I','1K','1L'];
 // Which groups' 3rd-place teams can be assigned to each slot
@@ -1091,22 +1091,30 @@ function matchTeamCell(team,side){
 // ── KNOCKOUT AUTO-FILL (locks only when 1st/2nd mathematically certain) ──
 // 2026 R32 bracket: position code -> [slotKey, side]. Third-place slots omitted.
 const R32_MAP={
-  '2A':['r32_0','home'],'2B':['r32_0','away'],
-  '1E':['r32_1','home'],
-  '1F':['r32_2','home'],'2C':['r32_2','away'],
-  '1C':['r32_3','home'],'2F':['r32_3','away'],
-  '1I':['r32_4','home'],
-  '2E':['r32_5','home'],'2I':['r32_5','away'],
-  '1A':['r32_6','home'],
-  '1L':['r32_7','home'],
-  '1D':['r32_8','home'],
-  '1G':['r32_9','home'],
-  '2K':['r32_10','home'],'2L':['r32_10','away'],
-  '1H':['r32_11','home'],'2J':['r32_11','away'],
-  '1B':['r32_12','home'],
-  '1J':['r32_13','home'],'2H':['r32_13','away'],
-  '1K':['r32_14','home'],
-  '2D':['r32_15','home'],'2G':['r32_15','away']
+  // Visual slot 0-1: M74 (1E vs 3rd), M77 (1I vs 3rd)
+  '1E':['r32_0','home'],
+  '1I':['r32_1','home'],
+  // Visual slot 2-3: M73 (2A vs 2B), M75 (1F vs 2C)
+  '2A':['r32_2','home'],'2B':['r32_2','away'],
+  '1F':['r32_3','home'],'2C':['r32_3','away'],
+  // Visual slot 4-5: M83 (2K vs 2L), M84 (1H vs 2J)
+  '2K':['r32_4','home'],'2L':['r32_4','away'],
+  '1H':['r32_5','home'],'2J':['r32_5','away'],
+  // Visual slot 6-7: M81 (1D vs 3rd), M82 (1G vs 3rd)
+  '1D':['r32_6','home'],
+  '1G':['r32_7','home'],
+  // Visual slot 8-9: M76 (1C vs 2F), M78 (2E vs 2I)
+  '1C':['r32_8','home'],'2F':['r32_8','away'],
+  '2E':['r32_9','home'],'2I':['r32_9','away'],
+  // Visual slot 10-11: M79 (1A vs 3rd), M80 (1L vs 3rd)
+  '1A':['r32_10','home'],
+  '1L':['r32_11','home'],
+  // Visual slot 12-13: M86 (1J vs 2H), M88 (2D vs 2G)
+  '1J':['r32_12','home'],'2H':['r32_12','away'],
+  '2D':['r32_13','home'],'2G':['r32_13','away'],
+  // Visual slot 14-15: M85 (1B vs 3rd), M87 (1K vs 3rd)
+  '1B':['r32_14','home'],
+  '1K':['r32_15','home']
 };
 // A team's exact finish is "certain" only on points: it can't be caught (1st)
 // or it's sure to be 2nd (exactly one team certainly above, the rest certainly below).
@@ -1142,16 +1150,32 @@ function autoR32(){
   return map;
 }
 
-// Match number → slot key mapping
-const KO_NUM_TO_KEY=(()=>{
-  const map={};
-  for(let i=0;i<16;i++) map[73+i]='r32_'+i;
-  for(let i=0;i<8;i++)  map[89+i]='r16_'+i;
-  for(let i=0;i<4;i++)  map[97+i]='qf_'+i;
-  for(let i=0;i<2;i++)  map[101+i]='sf_'+i;
-  map[103]='third_0'; map[104]='final_0';
-  return map;
-})();
+// Match number → visual bracket slot key mapping
+// R32 pairs must be adjacent so bracket lines connect correctly:
+// (0,1)→R16_0  (2,3)→R16_1  (4,5)→R16_2  etc.
+const KO_NUM_TO_KEY={
+  // R32 — ordered by bracket flow, not match number
+  74:'r32_0',  77:'r32_1',   // → r16_0 (M89: W74 vs W77)
+  73:'r32_2',  75:'r32_3',   // → r16_1 (M90: W73 vs W75)
+  83:'r32_4',  84:'r32_5',   // → r16_2 (M93: W83 vs W84)
+  81:'r32_6',  82:'r32_7',   // → r16_3 (M94: W81 vs W82)
+  76:'r32_8',  78:'r32_9',   // → r16_4 (M91: W76 vs W78)
+  79:'r32_10', 80:'r32_11',  // → r16_5 (M92: W79 vs W80)
+  86:'r32_12', 88:'r32_13',  // → r16_6 (M95: W86 vs W88)
+  85:'r32_14', 87:'r32_15',  // → r16_7 (M96: W85 vs W87)
+  // R16
+  89:'r16_0', 90:'r16_1',    // → qf_0 (M97: W89 vs W90)
+  93:'r16_2', 94:'r16_3',    // → qf_1 (M98: W93 vs W94)
+  91:'r16_4', 92:'r16_5',    // → qf_2 (M99: W91 vs W92)
+  95:'r16_6', 96:'r16_7',    // → qf_3 (M100: W95 vs W96)
+  // QF
+  97:'qf_0', 98:'qf_1',      // → sf_0 (M101: W97 vs W98)
+  99:'qf_2', 100:'qf_3',     // → sf_1 (M102: W99 vs W100)
+  // SF
+  101:'sf_0', 102:'sf_1',    // → final_0 (M104: W101 vs W102)
+  // 3rd/Final
+  103:'third_0', 104:'final_0'
+};
 function koKeyFromNum(num){ return KO_NUM_TO_KEY[+num]||null; }
 
 // Determine winner of a KO match (for propagation)
