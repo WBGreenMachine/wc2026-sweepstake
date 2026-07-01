@@ -551,8 +551,8 @@ function getStandings(gid){
   const tbl={};
   GROUPS[gid].forEach(t=>tbl[t]={p:0,w:0,d:0,l:0,gf:0,ga:0,pts:0});
   allGroupMatches.filter(m=>m.g===gid).forEach(m=>{
-    const sc=scores[m.home+'_'+m.away];
-    if(!sc||sc.hs==null||sc.as==null) return;
+    const sc=scoreForTeams(m.home,m.away);
+    if(!matchPlayed(sc)) return;
     const h=+sc.hs,a=+sc.as; if(isNaN(h)||isNaN(a)) return;
     tbl[m.home].p++;tbl[m.away].p++;
     tbl[m.home].gf+=h;tbl[m.home].ga+=a;tbl[m.away].gf+=a;tbl[m.away].ga+=h;
@@ -565,10 +565,7 @@ function getStandings(gid){
 }
 
 function groupComplete(gid){
-  return allGroupMatches.filter(m=>m.g===gid).every(m=>{
-    const sc=scores[m.home+'_'+m.away];
-    return sc&&sc.hs!=null&&sc.as!=null&&!isNaN(+sc.hs)&&!isNaN(+sc.as);
-  });
+  return allGroupMatches.filter(m=>m.g===gid).every(m=>matchPlayed(scoreForTeams(m.home,m.away)));
 }
 
 function getTeamGroupPts(team){
@@ -689,8 +686,12 @@ function aggregateGoals(arr){
 }
 
 function goalscorerRow(key){
-  const gs=goalscorers[key];
-  if(!gs||(!gs.home?.length&&!gs.away?.length)) return '';
+  let gs=normaliseGoalsPayload(goalscorers[key]);
+  if(!gs || (!gs.home.length&&!gs.away.length)){
+    const pair=parseMatchKeyTeams(key);
+    if(pair) gs=goalscorersForTeams(pair.home,pair.away);
+  }
+  if(!gs||(!gs.home.length&&!gs.away.length)) return '';
   const side=(arr,align)=>aggregateGoals(arr).map(s=>`<div style="text-align:${align};line-height:1.5">${s}</div>`).join('');
   const hl=side(gs.home,'right');
   const al=side(gs.away,'left');
@@ -703,8 +704,8 @@ function updateTicker(){
   const resultItems = [];
 
   allGroupMatches.forEach(m=>{
-    const sc=scores[m.home+'_'+m.away];
-    if(!sc||sc.hs==null||sc.as==null) return;
+    const sc=scoreForTeams(m.home,m.away);
+    if(!matchPlayed(sc)) return;
     const ho=ownerOf(m.home).join(', ');
     const ao=ownerOf(m.away).join(', ');
     const item={home:m.home,away:m.away,hs:sc.hs,as:sc.as,ho,ao};
@@ -782,15 +783,20 @@ function stripMinute(s){ return (s||'').replace(/\s+\d+(\+\d+)?'?\s*$/,'').trim(
 // so they're counted toward the listed scorer — rare edge case for a sweepstake.
 function computeScorers(){
   const tally={};
-  Object.entries(goalscorers||{}).forEach(([key,gs])=>{
-    const us=key.indexOf('_'); if(us<0) return;
-    const home=key.slice(0,us), away=key.slice(us+1);
-    const add=(list,team)=>{(list||[]).forEach(e=>{
-      const name=stripMinute(e); if(!name) return;
-      if(!tally[name]) tally[name]={name,team,goals:0};
-      tally[name].goals++;
-    });};
-    add(gs.home,home); add(gs.away,away);
+  const add=(list,team)=>{normaliseGoalList(list).forEach(e=>{
+    const name=stripMinute(e); if(!name) return;
+    const key=stripAccents(name.toLowerCase());
+    if(!tally[key]) tally[key]={name,team,goals:0};
+    // Prefer a resolved team name when later entries provide one.
+    if(team && (!tally[key].team || !FLAG_CODES[tally[key].team])) tally[key].team=team;
+    tally[key].goals++;
+  });};
+  const auto=(typeof autoKo==='function')?autoKo():{};
+  Object.entries(goalscorers||{}).forEach(([key,raw])=>{
+    const identified=identifyMatchEntry(key,raw,auto);
+    const gs=normaliseGoalsPayload(raw,identified.reversed);
+    add(gs.home,identified.home||'');
+    add(gs.away,identified.away||'');
   });
   return Object.values(tally).sort((a,b)=>b.goals-a.goals||a.name.localeCompare(b.name));
 }
@@ -879,16 +885,145 @@ function matchPlayed(sc){
   return sc&&sc.hs!=null&&sc.as!=null&&!isNaN(+sc.hs)&&!isNaN(+sc.as);
 }
 
-// KO matches can arrive from the live sync in the main `scores` node using
-// the real team names as the key, while manual/admin KO entries live in `ko`.
-// This reads either direction and normalises the score to the displayed home/away order.
-function scoreForTeams(home,away){
-  if(!home||!away) return null;
-  const direct=scores[home+'_'+away];
-  if(matchPlayed(direct)) return {hs:+direct.hs,as:+direct.as,live:!!direct.live,_fromScores:true};
-  const reverse=scores[away+'_'+home];
-  if(matchPlayed(reverse)) return {hs:+reverse.as,as:+reverse.hs,live:!!reverse.live,_fromScores:true};
+function stripAccentsBasic(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+function normTeamName(s){
+  const aliases={
+    'usa':'united states','us':'united states','u s a':'united states','united states of america':'united states',
+    'czech republic':'czechia','cote divoire':'ivory coast','côte divoire':'ivory coast','cote d ivoire':'ivory coast',
+    'cabo verde':'cape verde','curacao':'curacao','curaçao':'curacao','korea republic':'south korea',
+    'ir iran':'iran','congo dr':'dr congo','dr congo':'dr congo','bosnia and herzegovina':'bosnia herzegovina',
+    'bosnia & herzegovina':'bosnia herzegovina','bosnia-herzegovina':'bosnia herzegovina'
+  };
+  let x=stripAccentsBasic(s).toLowerCase().replace(/&/g,' and ').replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+  return aliases[x]||x;
+}
+function teamsSame(a,b){ return normTeamName(a)===normTeamName(b); }
+function knownTeams(){ return Object.values(GROUPS).flat(); }
+function parseMatchKeyTeams(key){
+  const raw=String(key||'');
+  if(!raw) return null;
+  const teams=knownTeams();
+  const nk=normTeamName(raw);
+  for(const h of teams){
+    for(const a of teams){
+      if(h===a) continue;
+      const combos=[`${h}_${a}`,`${h} v ${a}`,`${h} vs ${a}`,`${h}-${a}`,`${h} ${a}`];
+      if(combos.some(c=>normTeamName(c)===nk)) return {home:h,away:a};
+    }
+  }
+  const parts=raw.split('_');
+  if(parts.length>=2){
+    for(let i=1;i<parts.length;i++){
+      const h=parts.slice(0,i).join('_');
+      const a=parts.slice(i).join('_');
+      const home=teams.find(t=>teamsSame(t,h));
+      const away=teams.find(t=>teamsSame(t,a));
+      if(home&&away) return {home,away};
+    }
+  }
   return null;
+}
+function entryTeam(raw,side){
+  if(!raw||typeof raw!=='object') return null;
+  const keys=side==='home'
+    ? ['home','homeTeam','team1','team_1','hteam','home_name','team1Name','homeName']
+    : ['away','awayTeam','team2','team_2','ateam','away_name','team2Name','awayName'];
+  for(const k of keys){
+    const v=raw[k];
+    if(!v) continue;
+    if(typeof v==='string') return v;
+    if(typeof v==='object') return v.name||v.title||v.shortName||null;
+  }
+  return null;
+}
+function scoreFromRaw(raw,reversed=false){
+  if(!raw||typeof raw!=='object') return null;
+  let hs=raw.hs, as=raw.as;
+  if(hs==null) hs=raw.homeScore??raw.scoreHome??raw.goalsHome??raw.home_goals??raw.h;
+  if(as==null) as=raw.awayScore??raw.scoreAway??raw.goalsAway??raw.away_goals??raw.a;
+  if((hs==null||as==null)&&raw.score){
+    if(Array.isArray(raw.score.ft)){ hs=raw.score.ft[0]; as=raw.score.ft[1]; }
+    else if(Array.isArray(raw.score)){ hs=raw.score[0]; as=raw.score[1]; }
+    else if(typeof raw.score==='object'){
+      hs=raw.score.home??raw.score.h??raw.score.homeScore??hs;
+      as=raw.score.away??raw.score.a??raw.score.awayScore??as;
+    }
+  }
+  if(hs==null||as==null||isNaN(+hs)||isNaN(+as)) return null;
+  return reversed?{hs:+as,as:+hs,live:!!raw.live,_fromScores:true}:{hs:+hs,as:+as,live:!!raw.live,_fromScores:true};
+}
+function identifyMatchEntry(key,raw,auto={}){
+  let pair=parseMatchKeyTeams(key);
+  let home=pair?.home||entryTeam(raw,'home');
+  let away=pair?.away||entryTeam(raw,'away');
+  const n=String(key||'').match(/\d+/)?.[0];
+  if((!home||!away)&&n&&typeof koKeyFromNum==='function'&&typeof fixtureTeamsFor==='function'){
+    const kf=(KO_FIXTURES||[]).find(f=>+f.num===+n);
+    if(kf){ const t=fixtureTeamsFor(kf,auto); home=t.homeResolved?t.home:home; away=t.awayResolved?t.away:away; }
+  }
+  return {home:home||null,away:away||null,reversed:false};
+}
+function findMatchIn(source,home,away){
+  if(!home||!away||!source) return null;
+  const direct=source[home+'_'+away];
+  const ds=scoreFromRaw(direct,false); if(ds) return {raw:direct,score:ds,reversed:false};
+  const reverse=source[away+'_'+home];
+  const rs=scoreFromRaw(reverse,true); if(rs) return {raw:reverse,score:rs,reversed:true};
+  for(const [key,raw] of Object.entries(source||{})){
+    const pair=identifyMatchEntry(key,raw);
+    if(pair.home&&pair.away&&teamsSame(pair.home,home)&&teamsSame(pair.away,away)){
+      const sc=scoreFromRaw(raw,false); if(sc) return {raw,score:sc,reversed:false};
+    }
+    if(pair.home&&pair.away&&teamsSame(pair.home,away)&&teamsSame(pair.away,home)){
+      const sc=scoreFromRaw(raw,true); if(sc) return {raw,score:sc,reversed:true};
+    }
+  }
+  return null;
+}
+// KO matches can arrive from the live sync in the main `scores` node using real team names,
+// match numbers, or richer objects. Manual/admin KO entries still take priority via `ko`.
+function scoreForTeams(home,away){
+  const found=findMatchIn(scores,home,away);
+  return found?found.score:null;
+}
+function scoreForKoKey(key){
+  const kf=koFixtureForKey(key);
+  if(!kf) return null;
+  const candidates=[String(kf.num),'M'+kf.num,'m'+kf.num,'match_'+kf.num,'Match_'+kf.num,key];
+  for(const c of candidates){ const sc=scoreFromRaw(scores[c],false); if(sc) return sc; }
+  return null;
+}
+function goalText(g){
+  if(!g) return '';
+  if(typeof g==='string') return g;
+  if(typeof g==='object'){
+    const name=g.name||g.player||g.scorer||g.playerName||g.fullName||'';
+    const minute=g.minute??g.time??g.min??g.minutes??'';
+    const m=String(minute||'').replace(/'$/,'');
+    return `${name}${m?` ${m}'`:''}`.trim();
+  }
+  return String(g);
+}
+function normaliseGoalList(list){
+  if(!list) return [];
+  if(Array.isArray(list)) return list.map(goalText).filter(Boolean);
+  if(typeof list==='object') return Object.values(list).map(goalText).filter(Boolean);
+  return [goalText(list)].filter(Boolean);
+}
+function normaliseGoalsPayload(raw,reversed=false){
+  if(!raw||typeof raw!=='object') return {home:[],away:[]};
+  let h=raw.homeGoals||raw.goals1||raw.homeScorers||raw.scorersHome||raw.home||[];
+  let a=raw.awayGoals||raw.goals2||raw.awayScorers||raw.scorersAway||raw.away||[];
+  // If `home`/`away` are team-name strings, ignore them as scorer lists.
+  if(typeof h==='string' && entryTeam(raw,'home')===h) h=[];
+  if(typeof a==='string' && entryTeam(raw,'away')===a) a=[];
+  h=normaliseGoalList(h); a=normaliseGoalList(a);
+  return reversed?{home:a,away:h}:{home:h,away:a};
+}
+function goalscorersForTeams(home,away){
+  const found=findMatchIn(goalscorers,home,away);
+  if(found) return normaliseGoalsPayload(found.raw,found.reversed);
+  return {home:[],away:[]};
 }
 function nextMatchInfo(){
   const now=Date.now(); let best=null;
@@ -905,7 +1040,7 @@ function nextMatchInfo(){
   (KO_FIXTURES||[]).forEach(kf=>{
     const d=koToDate(kf.ko);
     const key=koKeyFromNum(kf.num);
-    const sc=key?koMatches[key]:null;
+    const sc=key?effectiveKo(key,auto):null;
     if(matchPlayed(sc)) return;
     const teams=fixtureTeamsFor(kf,auto);
     consider(d,{...kf,...teams,type:'ko'});
@@ -1175,7 +1310,10 @@ function effectiveKo(key,auto){
   const away=m.away||am.away||null;
   let hs=m.hs, as=m.as, live=!!m.live, scoreFromFeed=false;
   if((hs==null||as==null)&&home&&away){
-    const feed=scoreForTeams(home,away);
+    const feed=scoreForTeams(home,away)||scoreForKoKey(key);
+    if(feed){ hs=feed.hs; as=feed.as; live=!!feed.live; scoreFromFeed=true; }
+  } else if((hs==null||as==null)){
+    const feed=scoreForKoKey(key);
     if(feed){ hs=feed.hs; as=feed.as; live=!!feed.live; scoreFromFeed=true; }
   }
   return { home, away, hs, as, winner:m.winner, live, _scoreFromFeed:scoreFromFeed, _autoHome:!m.home&&!!am.home, _autoAway:!m.away&&!!am.away };
@@ -1342,7 +1480,7 @@ function renderFixtures(){
     html+=`<div style="margin-bottom:18px"><div style="font-family:'Abril Fatface',serif;font-size:16px;color:var(--green);margin-bottom:8px;display:flex;align-items:center;gap:8px">${day}${isToday?'<span style="font-size:10px;font-weight:800;background:var(--green);color:#fff;padding:2px 8px;border-radius:10px;font-family:Nunito,sans-serif">TODAY</span>':''}</div>`;
     items.forEach(m=>{
       const isKo=m.type==='ko';
-      const sc=isKo?(m.matchKey?effectiveKo(m.matchKey,auto):null):scores[m.home+'_'+m.away];
+      const sc=isKo?(m.matchKey?effectiveKo(m.matchKey,auto):null):scoreForTeams(m.home,m.away);
       const has=matchPlayed(sc);
       const ho=m.homeResolved?ownerOf(m.home)[0]:null;
       const ao=m.awayResolved?ownerOf(m.away)[0]:null;
@@ -1367,7 +1505,7 @@ function renderFixtures(){
 
 // ── HERO STATS ────────────────────────────────────────────
 function renderHeroStats(){
-  const played=allGroupMatches.filter(m=>{const sc=scores[m.home+'_'+m.away];return sc&&sc.hs!=null&&sc.as!=null&&!isNaN(+sc.hs)&&!isNaN(+sc.as);}).length;
+  const played=allGroupMatches.filter(m=>matchPlayed(scoreForTeams(m.home,m.away))).length;
   const goals=Object.values(scores).reduce((s,sc)=>{if(sc&&sc.hs!=null&&sc.as!=null){const h=+sc.hs,a=+sc.as;if(!isNaN(h)&&!isNaN(a))return s+h+a;}return s;},0);
 
   // Teams Left = 48 minus teams definitely eliminated.
