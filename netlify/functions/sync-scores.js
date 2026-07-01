@@ -194,10 +194,11 @@ exports.handler = async function () {
         const entry = { home, away, hs, as: as_ };
         let hasWinner = false;
 
-        if (m.score.pen && m.score.pen.length === 2) {
-          entry.penHome = m.score.pen[0];
-          entry.penAway = m.score.pen[1];
-          entry.winner = m.score.pen[0] > m.score.pen[1] ? home : away;
+        if ((m.score.p && m.score.p.length === 2) || (m.score.pen && m.score.pen.length === 2)) {
+          const pen = m.score.p || m.score.pen;
+          entry.penHome = pen[0];
+          entry.penAway = pen[1];
+          entry.winner = pen[0] > pen[1] ? home : away;
           hasWinner = true;
         } else if (m.score.et && m.score.et.length === 2) {
           entry.etHome = m.score.et[0];
