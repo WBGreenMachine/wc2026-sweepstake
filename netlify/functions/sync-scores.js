@@ -79,14 +79,20 @@ async function getAccessToken() {
   });
 }
 
-function firebaseSet(path, value, token) {
+async function firebaseSet(path, value, token) {
+  return firebaseWrite(path, value, token, "PUT");
+}
+async function firebasePatch(path, value, token) {
+  return firebaseWrite(path, value, token, "PATCH");
+}
+async function firebaseWrite(path, value, token, method) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify(value);
     const url  = new URL(`${DB_URL}/${path}.json`);
     const options = {
       hostname: url.hostname,
       path: url.pathname + `?access_token=${token}`,
-      method: "PUT",
+      method: method,
       headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) }
     };
     let data = "";
@@ -142,11 +148,37 @@ exports.handler = async function () {
     const goalscorers = {};
     let scored = 0;
 
+    // Match number → bracket slot key (must match index.html's KO_NUM_TO_KEY)
+    const KO_NUM_TO_KEY = {
+      74:'r32_0',77:'r32_1',73:'r32_2',75:'r32_3',83:'r32_4',84:'r32_5',
+      81:'r32_6',82:'r32_7',76:'r32_8',78:'r32_9',79:'r32_10',80:'r32_11',
+      86:'r32_12',88:'r32_13',85:'r32_14',87:'r32_15',
+      89:'r16_0',90:'r16_1',93:'r16_2',94:'r16_3',
+      91:'r16_4',92:'r16_5',95:'r16_6',96:'r16_7',
+      97:'qf_0',98:'qf_1',99:'qf_2',100:'qf_3',
+      101:'sf_0',102:'sf_1',103:'third_0',104:'final_0'
+    };
+    // All known team names for checking if a name is real vs a code
+    const KNOWN_TEAMS = new Set(Object.keys(NAME_MAP).map(norm).concat([
+      "Mexico","South Africa","South Korea","Czechia","Canada","Bosnia-Herzegovina",
+      "Qatar","Switzerland","Brazil","Morocco","Haiti","Scotland","United States",
+      "Paraguay","Australia","Turkey","Germany","Curacao","Ivory Coast","Ecuador",
+      "Netherlands","Japan","Sweden","Tunisia","Belgium","Egypt","Iran","New Zealand",
+      "Spain","Cape Verde","Saudi Arabia","Uruguay","France","Senegal","Iraq","Norway",
+      "Argentina","Algeria","Austria","Jordan","Portugal","DR Congo","Uzbekistan",
+      "Colombia","England","Croatia","Ghana","Panama"
+    ]));
+
+    const ko = {};  // KO entries to PATCH into Firebase
+
     for (const m of matches) {
       if (!m.score || !m.score.ft) continue;  // skip unplayed
       const home = norm(m.team1);
       const away = norm(m.team2);
-      scores[`${home}_${away}`] = { hs: m.score.ft[0], as: m.score.ft[1], live: false };
+      const hs = m.score.ft[0];
+      const as_ = m.score.ft[1];
+
+      scores[`${home}_${away}`] = { hs, as: as_, live: false };
       scored++;
 
       const homeGoals = (m.goals1 || []).map(g => `${g.name} ${g.minute}'`);
@@ -154,11 +186,44 @@ exports.handler = async function () {
       if (homeGoals.length || awayGoals.length) {
         goalscorers[`${home}_${away}`] = { home: homeGoals, away: awayGoals };
       }
+
+      // Write KO matches to the ko node (only if both teams are real, not position codes)
+      if (m.num && KO_NUM_TO_KEY[m.num] && KNOWN_TEAMS.has(home) && KNOWN_TEAMS.has(away)) {
+        const slotKey = KO_NUM_TO_KEY[m.num];
+        const entry = { home, away, hs, as: as_ };
+
+        // Determine winner — check penalties, then extra time, then full time
+        if (m.score.pen && m.score.pen.length === 2) {
+          // Penalty shootout
+          entry.penHome = m.score.pen[0];
+          entry.penAway = m.score.pen[1];
+          entry.winner = m.score.pen[0] > m.score.pen[1] ? home : away;
+        } else if (m.score.et && m.score.et.length === 2) {
+          // Extra time (no penalties needed)
+          entry.etHome = m.score.et[0];
+          entry.etAway = m.score.et[1];
+          entry.hs = m.score.et[0];  // show ET score as the main score
+          entry.as = m.score.et[1];
+          entry.winner = m.score.et[0] > m.score.et[1] ? home : (m.score.et[1] > m.score.et[0] ? away : null);
+        } else if (hs > as_) {
+          entry.winner = home;
+        } else if (as_ > hs) {
+          entry.winner = away;
+        }
+        // If still no winner (draw with no ET/pen data yet), leave winner null
+
+        ko[slotKey] = entry;
+      }
     }
 
     console.log("Scored matches found: " + scored);
     await firebaseSet("scores", scores, token);
     await firebaseSet("goalscorers", goalscorers, token);
+    const koCount = Object.keys(ko).length;
+    if (koCount > 0) {
+      await firebasePatch("ko", ko, token);
+      console.log("Wrote " + koCount + " KO matches to ko node");
+    }
     console.log("Sync complete - wrote " + scored + " scores");
 
     return { statusCode: 200, body: JSON.stringify({ ok: true, scored }) };
