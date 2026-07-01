@@ -1409,15 +1409,26 @@ function renderHeroStats(){
 function renderSweepstake(){
   let html='<div class="tier-legend"><span class="tier-badge tier-1">Tier 1 — Favourites</span><span class="tier-badge tier-2">Tier 2 — Contenders</span><span class="tier-badge tier-3">Tier 3 — Underdogs</span><span class="tier-badge tier-4">Tier 4 — No Chance</span></div>';
   html+='<div class="player-grid">';
+  const auto=autoKo();
+  const eliminated=new Set();
+  const allDone=allGroupsComplete();
+  if(allDone) Object.keys(GROUPS).forEach(gid=>{const st=getStandings(gid);st.forEach((t,i)=>{if(i===3||(i===2&&!isBestThird(t.name)))eliminated.add(t.name);});});
+  const koElim={};
+  const roundNames={r32:'R32',r16:'R16',qf:'QF',sf:'SF',final:'Final'};
+  KO_ROUNDS.forEach(r=>{for(let i=0;i<r.matches;i++){const eff=effectiveKo(r.id+'_'+i,auto);const w=koWinnerOf(eff);if(w&&eff.home&&eff.away){const loser=w===eff.home?eff.away:eff.home;eliminated.add(loser);koElim[loser]=roundNames[r.id]||r.label;}}});
   PARTICIPANTS.forEach(name=>{
     const teams=PRESET_TEAMS[name]||[];
     const picks=GOLDEN_BOOT_PICKS[name]||[];
     const rows=teams.map(t=>{
       if(!t) return '';
       const tier=tierOf(t);
-      const inKO=KO_ROUNDS.some(r=>{for(let i=0;i<r.matches;i++){const m=koMatches[r.id+'_'+i];if(m&&(m.home===t||m.away===t))return true;}return false;});
-      const badge=inKO?'<span class="q-badge">KO</span>':'';
-      return `<div class="team-tag"><span class="tier-dot t${tier}"></span>${flag(t)}<span style="margin-left:3px">${t}</span>${badge}</div>`;
+      const isOut=eliminated.has(t);
+      const koRound=koElim[t];
+      let badge='';
+      if(koRound) badge=`<span class="out-badge">${koRound}</span>`;
+      else if(isOut) badge='<span class="out-badge">OUT</span>';
+      else if(allDone) badge='<span class="q-badge">IN</span>';
+      return `<div class="team-tag" style="${isOut?'opacity:.45':''}"><span class="tier-dot t${tier}"></span>${flag(t)}<span style="margin-left:3px">${t}</span><span style="margin-left:auto">${badge}</span></div>`;
     }).join('');
     const pickRows=picks.map(p=>`<div style="font-size:11px;color:var(--muted);padding:2px 0">&#128095; ${p}</div>`).join('');
     html+=`<div class="player-card"><div class="player-card-header" style="display:flex;align-items:center;gap:8px">${playerBadge(name,28)}<div class="player-name-display">${name}</div></div><div>${rows||'<div style="font-size:11px;color:var(--muted)">No teams yet</div>'}</div>${picks.length?`<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">${pickRows}</div>`:''}</div>`;
