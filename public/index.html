@@ -878,6 +878,18 @@ function koToDate(label){
 function matchPlayed(sc){
   return sc&&sc.hs!=null&&sc.as!=null&&!isNaN(+sc.hs)&&!isNaN(+sc.as);
 }
+
+// KO matches can arrive from the live sync in the main `scores` node using
+// the real team names as the key, while manual/admin KO entries live in `ko`.
+// This reads either direction and normalises the score to the displayed home/away order.
+function scoreForTeams(home,away){
+  if(!home||!away) return null;
+  const direct=scores[home+'_'+away];
+  if(matchPlayed(direct)) return {hs:+direct.hs,as:+direct.as,live:!!direct.live,_fromScores:true};
+  const reverse=scores[away+'_'+home];
+  if(matchPlayed(reverse)) return {hs:+reverse.as,as:+reverse.hs,live:!!reverse.live,_fromScores:true};
+  return null;
+}
 function nextMatchInfo(){
   const now=Date.now(); let best=null;
   const consider=(date,m)=>{
@@ -1153,11 +1165,20 @@ function autoR32(){
   Object.entries(thirdMap).forEach(([key,val])=>{ map[key]={...(map[key]||{}),...val}; });
   return map;
 }
-// Merge manual koMatches over auto-filled certainties (display only, no DB writes)
+// Merge manual koMatches over auto-filled teams, then pull scores from either:
+// 1) the manual `ko` node, or
+// 2) the synced `scores` node keyed by the resolved team names.
 function effectiveKo(key,auto){
   const m=koMatches[key]||{};
   const am=(auto||{})[key]||{};
-  return { home:m.home||am.home||null, away:m.away||am.away||null, hs:m.hs, as:m.as, winner:m.winner, _autoHome:!m.home&&!!am.home, _autoAway:!m.away&&!!am.away };
+  const home=m.home||am.home||null;
+  const away=m.away||am.away||null;
+  let hs=m.hs, as=m.as, live=!!m.live, scoreFromFeed=false;
+  if((hs==null||as==null)&&home&&away){
+    const feed=scoreForTeams(home,away);
+    if(feed){ hs=feed.hs; as=feed.as; live=!!feed.live; scoreFromFeed=true; }
+  }
+  return { home, away, hs, as, winner:m.winner, live, _scoreFromFeed:scoreFromFeed, _autoHome:!m.home&&!!am.home, _autoAway:!m.away&&!!am.away };
 }
 function teamFromKoCode(code,auto){
   if(!code) return null;
@@ -1547,7 +1568,7 @@ function renderKnockouts(){
       if(isAdmin){
         const opts='<option value="">— TBD —</option>'+allTeams.map(t=>`<option value="${t}" ${m.home===t?'selected':''}>${t}</option>`).join('');
         const opts2='<option value="">— TBD —</option>'+allTeams.map(t=>`<option value="${t}" ${m.away===t?'selected':''}>${t}</option>`).join('');
-        html+=`${fixtureMeta?`<div style="margin:0 0 -2px;padding:5px 14px;background:var(--surface2);border:2px solid var(--border);border-bottom:none;border-radius:var(--radius) var(--radius) 0 0;font-size:10px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${fixtureMeta}</div>`:''}<div class="ko-match ${has?'has-score':''} ${tied&&m.winner?'winner-set':''}" style="${fixtureMeta?'border-radius:0 0 var(--radius) var(--radius)':''}"><div class="ko-team"><select onchange="setKoTeam('${key}','home',this.value)">${opts}</select></div><div class="score-center"><input class="score-inp" type="number" min="0" max="99" value="${raw.hs!=null?raw.hs:''}" placeholder="?" oninput="setKoScore('${key}','hs',this.value)"><span class="score-sep">–</span><input class="score-inp" type="number" min="0" max="99" value="${raw.as!=null?raw.as:''}" placeholder="?" oninput="setKoScore('${key}','as',this.value)"></div><div class="ko-team right"><select onchange="setKoTeam('${key}','away',this.value)">${opts2}</select></div></div>`;
+        html+=`${fixtureMeta?`<div style="margin:0 0 -2px;padding:5px 14px;background:var(--surface2);border:2px solid var(--border);border-bottom:none;border-radius:var(--radius) var(--radius) 0 0;font-size:10px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${fixtureMeta}</div>`:''}<div class="ko-match ${has?'has-score':''} ${tied&&m.winner?'winner-set':''}" style="${fixtureMeta?'border-radius:0 0 var(--radius) var(--radius)':''}"><div class="ko-team"><select onchange="setKoTeam('${key}','home',this.value)">${opts}</select></div><div class="score-center"><input class="score-inp" type="number" min="0" max="99" value="${m.hs!=null?m.hs:''}" placeholder="?" oninput="setKoScore('${key}','hs',this.value)"><span class="score-sep">–</span><input class="score-inp" type="number" min="0" max="99" value="${m.as!=null?m.as:''}" placeholder="?" oninput="setKoScore('${key}','as',this.value)"></div><div class="ko-team right"><select onchange="setKoTeam('${key}','away',this.value)">${opts2}</select></div></div>`;
         if(tied&&m.home&&m.away){
           const wOpts='<option value="">— Pick winner (pens/ET) —</option>'+[m.home,m.away].map(t=>`<option value="${t}" ${m.winner===t?'selected':''}>${t}</option>`).join('');
           html+=`<div style="padding:4px 14px 8px;background:var(--gold-light);border:2px solid var(--gold);border-top:none;border-radius:0 0 var(--radius) var(--radius);font-size:12px;font-weight:700;color:#7a5a00;display:flex;align-items:center;gap:8px">Draw — select winner: <select style="padding:4px 8px;border:2px solid var(--gold);border-radius:8px;background:#fff;font-family:'Nunito',sans-serif;font-size:12px;font-weight:700;cursor:pointer" onchange="setKoWinner('${key}',this.value)">${wOpts}</select></div>`;
