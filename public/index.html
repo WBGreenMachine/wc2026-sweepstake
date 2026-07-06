@@ -917,7 +917,8 @@ function renderBracket(){
         const owners=ownerOf(team);
         return `<div class="bracket-team ${winner===team?'winner':''}"><div class="bracket-team-left">${flag(team)}<span>${team}</span></div>${owners.length?`<span class="bracket-owner" style="display:inline-flex;align-items:center;gap:3px">${colorDot(owners[0],7)}${owners[0]}</span>`:''}<span class="bracket-score">${score!=null?score:''}</span></div>`;
       };
-      html+=`<div class="bracket-match">${tRow(m.home||null,has?m.hs:null)}${tRow(m.away||null,has?m.as:null)}${bracketPenBadge(m)}</div>`;
+      const timeLabel=!has?koTimeLabel(key):'';
+      html+=`<div class="bracket-match">${timeLabel?`<div style="text-align:center;font-size:8px;font-weight:800;color:var(--muted);padding:2px 4px;border-bottom:1px solid var(--border);background:var(--surface2)">${timeLabel}</div>`:''}${tRow(m.home||null,has?m.hs:null)}${tRow(m.away||null,has?m.as:null)}${bracketPenBadge(m)}</div>`;
     }
     html+=`<div style="flex:${(spacing-1)/2}"></div></div>`;
   });
@@ -1211,6 +1212,8 @@ const KO_NUM_TO_KEY={
   103:'third_0', 104:'final_0'
 };
 function koKeyFromNum(num){ return KO_NUM_TO_KEY[+num]||null; }
+function koFixtureForKey(key){ return (KO_FIXTURES||[]).find(kf=>koKeyFromNum(kf.num)===key)||null; }
+function koTimeLabel(key){ const kf=koFixtureForKey(key); if(!kf) return ''; const parts=(kf.ko||'').split(',').map(s=>s.trim()); return parts.length>=2?`${parts[0]}, ${parts[1]}`:''; }
 
 // Determine winner of a KO match (for propagation)
 function koWinnerOf(m){
@@ -1598,7 +1601,8 @@ function renderKnockouts(){
         const needsPens=effTied&&!eff.winner;
         const lbl=(team)=>{ if(!team) return '<span class="ko-tbd">TBD</span>'; const o=ownerOf(team)[0]; return `${flag(team)} ${team}${o?` <span style="font-size:10px;color:var(--muted);font-weight:700;display:inline-flex;align-items:center;gap:2px;margin-left:2px">${colorDot(o,6)}${o}</span>`:''}`; };
         const hn=lbl(eff.home), an=lbl(eff.away);
-        const scoreDisp=effHas?fmtKoScore(eff):`<span class="score-static">?</span><span class="score-sep">–</span><span class="score-static">?</span>`;
+        const koTime=koTimeLabel(key);
+        const scoreDisp=effHas?fmtKoScore(eff):(koTime?`<div style="text-align:center;line-height:1.3"><div style="font-size:11px;font-weight:900;color:var(--text)">${koTime.split(', ')[0]||''}</div><div style="font-size:10px;font-weight:600;color:var(--text)">${koTime.split(', ')[1]||''}</div></div>`:`<span class="score-static">?</span><span class="score-sep">–</span><span class="score-static">?</span>`);
         html+=`<div class="ko-match ${effHas?'has-score':''}" style="${needsPens?'border-color:var(--red)':''}"><div class="ko-team">${hn}</div><div class="score-center">${effHas?`<span style="font-family:'Abril Fatface',serif;font-size:18px;color:var(--green)">${scoreDisp}</span>`:scoreDisp}</div><div class="ko-team right">${an}</div></div>`;
         if(needsPens) html+=`<div style="padding:6px 14px;font-size:11px;font-weight:800;color:var(--red);background:var(--red-light);border:2px solid var(--red);border-top:none;border-radius:0 0 var(--radius) var(--radius);text-align:center">&#9888; Penalty result pending — admin needs to enter shootout score</div>`;
         else if(effTied&&eff.winner) html+=`<div style="padding:4px 14px 8px;font-size:11px;font-weight:800;color:#7a5a00;background:var(--gold-light);border:2px solid var(--gold);border-top:none;border-radius:0 0 var(--radius) var(--radius)">Winner: ${flag(eff.winner)} ${eff.winner}${eff.penHome!=null?' ('+eff.penHome+'–'+eff.penAway+' pens)':''}</div>`;
