@@ -224,6 +224,11 @@ exports.handler = async function () {
     }
 
     console.log("Scored matches found: " + scored);
+    // Safety: don't wipe Firebase if the feed returned suspiciously few results
+    if (scored < 5) {
+      console.log("WARNING: Only " + scored + " scored matches found — skipping write to protect existing data");
+      return { statusCode: 200, body: JSON.stringify({ ok: true, scored, skipped: true }) };
+    }
     await firebaseSet("scores", scores, token);
     await firebaseSet("goalscorers", goalscorers, token);
     const koCount = Object.keys(ko).length;
